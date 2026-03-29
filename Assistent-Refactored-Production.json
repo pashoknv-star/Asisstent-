@@ -1,0 +1,391 @@
+{
+  "name": "Assistent-Refactored-Production",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Подготовка данных сессии и очистка входа\nconst message = $input.first().json.message;\nconst chatId = message.chat.id;\nconst text = message.text || '';\nconst userId = message.from.id;\n\n// Проверка на пустое сообщение или команду старта без контекста\nif (!text.trim() && !message.new_chat_members) {\n  return [{ json: { skip: true, reason: 'empty_message' } }];\n}\n\n// Формирование единого sessionId для памяти\nconst sessionId = `chat_${chatId}_user_${userId}`;\n\nreturn [{\n  json: {\n    chatId,\n    userId,\n    text,\n    sessionId,\n    timestamp: new Date().toISOString(),\n    input: {\n      role: 'user',\n      content: text\n    }\n  }\n}];"
+      },
+      "id": "5a61e3ea-4536-4d48-816d-a8991082b022",
+      "name": "Init Session & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        -400
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.skip }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "45ed630a-d5f9-46b3-8f84-22b49fea4209",
+      "name": "Skip Empty?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Парсинг решения оркестратора\ntry {\n  const content = $input.first().json.output || $input.first().json.choices?.[0]?.message?.content;\n  const decision = typeof content === 'string' ? JSON.parse(content) : content;\n  \n  const target = decision.target_agent || 'general_chat';\n  const confidence = decision.confidence || 0;\n\n  return [{\n    json: {\n      ...$input.first().json,\n      targetAgent: target,\n      confidence: confidence,\n      routeTo: target === 'calendar_agent' ? 'calendar' : 'general'\n    }\n  }];\n} catch (e) {\n  // При ошибке парсинга идем в общий чат\n  return [{\n    json: {\n      ...$input.first().json,\n      targetAgent: 'general_chat',\n      confidence: 0,\n      routeTo: 'general'\n    }\n  }];\n}"
+      },
+      "id": "0300ea78-9983-40f8-aab5-5a5a04c3ff34",
+      "name": "Parse Orchestrator Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.targetAgent }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "general_chat",
+              "output": 1
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "f9962914-514b-4589-8a78-107d41d8b08f",
+      "name": "Route Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "agent": "openAiFunctionsAgent",
+        "options": {}
+      },
+      "id": "c2ffa211-8f91-4eaa-9c56-b798ccea2c66",
+      "name": "Calendar Agent (Tools)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "simplifyOutput": false,
+        "options": {}
+      },
+      "id": "a32e0f43-f24d-44b8-ad42-82b7a90c37af",
+      "name": "Memory Hub (Shared)",
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        -704
+      ],
+      "notes": "Единый узел памяти для всех агентов. Использует sessionId из входа."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Объединение результатов от разных веток с очисткой от JSON-разметки\nlet responseText = '';\n\n// Получаем входные данные\nconst input = $input.first().json;\n\n// Функция для извлечения чистого текста из различных форматов\nfunction extractContent(data) {\n  if (!data) return '';\n  \n  // Если строка - пробуем распарсить как JSON\n  if (typeof data === 'string') {\n    try {\n      const parsed = JSON.parse(data);\n      // Возвращаем только полезное содержимое, убираем action\n      return parsed.response || parsed.content || parsed.text || parsed.message || data;\n    } catch (e) {\n      // Если не JSON - чистим от возможных остатков JSON-синтаксиса\n      return data\n        .replace(/^\\s*\\{\\s*\"action\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"response\"\\s*:\\s*\"/, '') // Удаляем {\"action\": \"...\", \"response\": \"\n        .replace(/\"\\s*\\}\\s*$/, '') // Удаляем завершающие \"}\n        .replace(/\\\\\"/g, '\"') // Раэкранируем кавычки\n        .trim();\n    }\n  }\n  \n  // Если объект - извлекаем content/response\n  if (typeof data === 'object') {\n    // Исключаем технические поля\n    const { action, confidence, forward_to, ...rest } = data;\n    return rest.response || rest.content || rest.text || rest.message || JSON.stringify(rest);\n  }\n  \n  return String(data);\n}\n\n// Определяем источник ответа\nif (input.choices?.[0]?.message?.content) {\n  // Стандартный формат OpenAI/Groq API\n  responseText = extractContent(input.choices[0].message.content);\n} else if (input.output) {\n  // Ответ от General Chat или других агентов\n  responseText = extractContent(input.output);\n} else if (input.response) {\n  // Ответ от LangChain Agent (Calendar)\n  responseText = extractContent(input.response);\n} else if (input.content) {\n  // Прямой формат content\n  responseText = extractContent(input.content);\n} else {\n  // Fallback\n  responseText = 'Произошла ошибка обработки запроса.';\n}\n\n// Финальная очистка от технических префиксов, если остались\nresponseText = responseText\n  .replace(/^\\s*{\\s*\"action\"\\s*:\\s*\"respond\"\\s*,\\s*\"response\"\\s*:\\s*\"/i, '')\n  .replace(/^\\s*{\\s*\"action\"\\s*:\\s*\"route_calendar\"\\s*,\\s*\"response\"\\s*:\\s*\"/i, '')\n  .replace(/\"\\s*}\\s*$/g, '')\n  .replace(/\\\\\"/g, '\"')\n  .replace(/^[\"']|[\"']$/g, '')\n  .trim();\n\n// Если после очистки пусто - используем fallback\nif (!responseText) {\n  responseText = 'Не удалось обработать ответ агента.';\n}\n\nreturn [{\n  json: {\n    chatId: $('Init Session & Validate').first().json.chatId,\n    text: responseText,\n    originalInput: $('Init Session & Validate').first().json.text\n  }\n}];"
+      },
+      "id": "17faf0ad-1224-444e-8a0c-f904e10e4be2",
+      "name": "Merge Responses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Обработка ошибки: отправка сообщения пользователю\nconst chatId = $('Init Session & Validate').first()?.json?.chatId || $json.chatId;\nconst errorMsg = '⚠️ Произошла внутренняя ошибка. Попробуйте позже.';\n\nreturn [{\n  json: {\n    chatId: chatId,\n    text: errorMsg\n  }\n}];"
+      },
+      "id": "296ed7f7-3646-4d8c-8c16-0a3139e755ee",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        -880
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"ТЫ — МАРШРУТИЗАТОР (ORCHESTRATOR).\\nТвоя задача: определить нужный СКИЛЛ (агент) на основе сообщения пользователя.\\n\\nДОСТУПНЫЕ СКИЛЛЫ:\\n1. calendar_agent — Работа с календарем (создать, удалить, найти событие, расписание).\\n2. general_chat — Обычный разговор, вопросы, уточнения (используется по умолчанию).\\n\\nПРАВИЛА:\\n- Если пользователь говорит о времени, встречах, планах -> выбирай 'calendar_agent'.\\n- В остальных случаях -> выбирай 'general_chat'.\\n- НЕ отвечай на вопрос, ТОЛЬКО выбери скилл.\\n\\nФОРМАТ ОТВЕТА (СТРОГО JSON):\\n{\\\"target_agent\\\": \\\"calendar_agent\\\" | \\\"general_chat\\\", \\\"confidence\\\": 0-1}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.text }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 150,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        -400
+      ],
+      "id": "7074c574-9d2e-472b-bcef-5fa8202aceb8",
+      "name": "Groq models",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PkPpLSVu1GC9EZIv",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -592,
+        -400
+      ],
+      "id": "2e72f7ce-50f6-4b90-b3f8-0f1e7e91629f",
+      "name": "Telegram Trigger",
+      "webhookId": "9e2b81a4-24e2-470a-a159-4686b45ebc28",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Ты — General Chat. Отвечай кратко и по существу.\\n\\nПРАВИЛА:\\n1. Если тема = календарь/время/встречи → JSON: {\\\"action\\\": \\\"route_calendar\\\", \\\"response\\\": \\\"Переключаю на агента календаря\\\"}\\n2. Если обычный разговор → JSON: {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"твой ответ\\\"}\\n\\nПРИМЕРЫ:\\nUser: \\\"Привет\\\" → {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"Привет! Чем могу помочь?\\\"}\\nUser: \\\"Создай встречу\\\" → {\\\"action\\\": \\\"route_calendar\\\", \\\"response\\\": \\\"Переключаю...\\\"}\\nUser: \\\"Как дела?\\\" → {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"Отлично, готов помочь!\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.choices[0].message.reasoning.replace(/\\\"/g, '\\\\\\\"').replace(/\\\\n/g, ' ') }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 300,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        640,
+        -416
+      ],
+      "id": "c3ac56fb-4330-4b07-b0b3-928515ec3b08",
+      "name": "Groq models1",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PkPpLSVu1GC9EZIv",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        -416
+      ],
+      "id": "be4caff4-3b69-4391-88c9-65027fa413d7",
+      "name": "Send a text message",
+      "webhookId": "92a4eb69-943b-4091-a4de-1712f47e116b",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        -656
+      ],
+      "id": "600d8f80-3404-476c-a029-96b1dfdd06db",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "iSv7BjVpmQa3C5uJ",
+          "name": "DB rag_base"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Init Session & Validate": {
+      "main": [
+        [
+          {
+            "node": "Skip Empty?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Empty?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Groq models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Orchestrator Decision": {
+      "main": [
+        [
+          {
+            "node": "Route Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Switch": {
+      "main": [
+        [
+          {
+            "node": "Calendar Agent (Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq models1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Agent (Tools)": {
+      "main": [
+        [
+          {
+            "node": "Merge Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq models": {
+      "main": [
+        [
+          {
+            "node": "Parse Orchestrator Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Init Session & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq models1": {
+      "main": [
+        [
+          {
+            "node": "Merge Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Memory Hub (Shared)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Responses": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2cc4fbc7-a75c-4a43-b991-2123aa25adf3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ccf03437b343ab3a5d4bb83a8ba00957ad3202c3c6358cc13fae625b02e88ab3"
+  },
+  "id": "Hk2RXAoR0kTPdea4",
+  "tags": [
+    {
+      "updatedAt": "2026-03-29T17:02:12.531Z",
+      "createdAt": "2026-03-29T17:02:12.531Z",
+      "id": "51ktlpzelwctXXKV",
+      "name": "production"
+    },
+    {
+      "updatedAt": "2026-03-29T14:57:27.306Z",
+      "createdAt": "2026-03-29T14:57:27.306Z",
+      "id": "J3pdkorkb8zIkI4G",
+      "name": "refactored"
+    }
+  ]
+}
