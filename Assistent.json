@@ -1,0 +1,1598 @@
+{
+  "name": "Assistent",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "*"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -32,
+        864
+      ],
+      "id": "7b6f8a55-b1fa-4c4d-9632-d9f530dcd957",
+      "name": "Telegram Trigger",
+      "webhookId": "dc14b164-87a8-41c4-aa71-1fbf6b401979",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем входные данные. Это может быть строка или массив строк.\nconst input = $json.message.text;\n\n// Если данных нет, возвращаем null\nif (!input) {\n  return null;\n}\n\n// Преобразуем входные данные в единую строку для поиска.\n// Если это массив, соединяем его элементы через пробел.\n// Если это уже строка, оставляем как есть.\nconst textToSearch = Array.isArray(input) ? input.join(' ') : input;\n\n// Список слов для поиска (маркеры)\nconst keywords = [\n  'GigaChat',\n  'Гигачат',\n  'Giga',\n  'Гига',\n  '@gigachat_bot'\n];\n\n// Создаем регулярное выражение из списка слов.\n// 'i' - флаг, делающий поиск нечувствительным к регистру (найдет и \"Giga\", и \"giga\", и \"GIGA\").\nconst regex = new RegExp(keywords.join('|'), 'i');\n\n// Ищем совпадение в тексте\nconst match = textToSearch.match(regex);\n\n// Если совпадение найдено (match не равен null)\nif (match) {\n  // match[0] содержит именно то слово, которое было найдено в тексте\n  const foundWord = match[0];\n  \n  // Возвращаем результат в формате n8n\n  return [{\n    json: {\n      textmarker: foundWord\n    }\n  }];\n}\n\n// Если ни одно из слов не найдено, возвращаем null\nreturn [{\n  json: {\n    textmarker: null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        864
+      ],
+      "id": "91ef8cb2-df70-4784-b2fe-226942f864fd",
+      "name": "Парсинг массива",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d1a0d96f-1c4b-4a70-8cf1-cf822cedd07b",
+                    "leftValue": "={{ $json.textmarker }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "empty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.textmarker }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "d2956c9c-59b1-49ff-b229-b15ed7536a42"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        288,
+        864
+      ],
+      "id": "77444f6c-0565-455a-8391-1bc7e21de681",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем исходный текст\nconst inputText = $('Telegram Trigger').first().json.message.text;\n\n// Создаем новую строку, повторяя текст два раза через подчеркивание\nconst resultText = `${inputText} ${inputText}`;\n\n// Возвращаем результат в одном item\nreturn [{\n  json: {\n    text: resultText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        848
+      ],
+      "id": "78eb58ce-5174-45ab-9517-34e6ad86a26d",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f2817da3-12d7-46e3-b9e0-83303a1a2f65",
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "expert_consult",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "expert_consult"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ebd69afd-e413-4dd1-862b-a13eabdfee8f",
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "search_drive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "search_drive"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "46c1138b-073b-4105-9173-ed678a799c1b",
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "message_send",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "message_send"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cbe769cd-8199-4427-8cc0-4539c6833e3c",
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "clarification_needed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "clarification_needed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d7ba025f-cffd-4d58-9504-e61a9c521897",
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "calendar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "calendar"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1136,
+        784
+      ],
+      "id": "12888a4d-f0ae-4a8d-ad24-288981162f41",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"intent\": {\n      \"type\": \"string\",\n      \"enum\": [\"calendar\", \"expert_consult\", \"search_drive\", \"message_send\", \"clarification_needed\"],\n      \"description\": \"Тип запроса.\"\n    },\n    \"confidence\": {\n      \"type\": \"number\",\n      \"description\": \"Уверенность в определении интента от 0.0 до 1.0. Если намерение пользователя ясно (например, удали встречу), ставь confidence > 0.8 и используй инструменты поиска для завершения задачи.\"\n    },\n    \"payload\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"text\": { \n          \"type\": \"string\", \n          \"description\": \"Текст сообщения или вопрос: 'Уточни запрос: ...'\" \n        },\n        \"query\": { \"type\": \"string\", \"description\": \"Очищенный запрос для выбранного intent\" },\n        \n        \"recipient\": { \"type\": \"string\", \"description\": \"Имя или ID получателя сообщения\" }\n      \n    }\n    }\n  },\n  \"required\": [\"intent\", \"confidence\", \"payload\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        912,
+        720
+      ],
+      "id": "f1c7aadc-255b-466e-8cfb-6d79dc187ddf",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=💬 *Ассистент* готовит ответ...",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        848
+      ],
+      "id": "70e1c475-0386-418a-b38c-d5aa765c6c6c",
+      "name": "Service message",
+      "webhookId": "7eb1ff5f-48b3-4e6c-a1dd-1228e266fcda",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $('Оркестратор').item.json.output.payload.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1504,
+        944
+      ],
+      "id": "210d6f3e-8b7e-4270-8cf3-d414cd965e42",
+      "name": "Send a text message2",
+      "webhookId": "8dccdb05-ec1f-4760-8577-a91709744bb4",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "messageId": "={{ $('Service message').item.json.result.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        944
+      ],
+      "id": "66211dda-f297-40df-9295-e51d4df7ef70",
+      "name": "Delete a chat message1",
+      "webhookId": "a5aaaba6-f9ee-4c51-a8b1-50a67ba2df6e",
+      "alwaysOutputData": false,
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "code": {
+          "execute": {
+            "code": "/**\n * КАЛЕНДАРНЫЙ АГЕНТ - v3 (Исправленная логика дат и формата)\n */\nconst { ChatPromptTemplate } = require('@langchain/core/prompts');\nconst { AgentExecutor, createToolCallingAgent } = require('langchain/agents');\n\n// 1. ВХОДНЫЕ ДАННЫЕ\nconst inputData = $input.first().json;\nconst output = inputData.output || inputData;\nconst { intent, confidence, payload = {} } = output;\nconst { query = '', timezone = 'Asia/Yekaterinburg' } = payload;\n\nif (confidence < 0.8) {\n  return [{ json: { success: false, intent: \"clarification_needed\", error: \"Низкая уверенность\", original_query: query, confidence, message: \"Уточните запрос.\" } }];\n}\n\nlet action = null, eventName = null, targetDate = null, timeStart = null, timeEnd = null;\nlet events = [], parsedResult = null, executionError = null, agentOutput = null;\n\ntry {\n  const llm = await this.getInputConnectionData('ai_languageModel', 0);\n  const toolsArray = (await this.getInputConnectionData('ai_tool', 0)) || [];\n  if (!llm || toolsArray.length === 0) throw new Error('LLM или инструменты не подключены');\n\n  // 2. ДИНАМИЧЕСКИЙ СПРАВОЧНИК ДАТ\n  const now = new Date();\n  const fmt = (d) => d.toISOString().split('T')[0];\n  const fmtRu = (d) => {\n    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];\n    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;\n  };\n\n  const getRelativeDate = (days) => {\n    const d = new Date(now);\n    d.setDate(now.getDate() + days);\n    return d;\n  };\n\n  // Вычисляем границы недель\n  const day = now.getDay();\n  const monday = new Date(now);\n  monday.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));\n  const sunday = new Date(monday);\n  sunday.setDate(monday.getDate() + 6);\n\n  const nextMonday = new Date(monday);\n  nextMonday.setDate(monday.getDate() + 7);\n  const nextSunday = new Date(nextMonday);\n  nextSunday.setDate(nextMonday.getDate() + 6);\n\n  // Поиск следующего четверга\n  const nextThursday = new Date(now);\n  nextThursday.setDate(now.getDate() + ((4 + 7 - now.getDay()) % 7 || 7));\n\n  const periods = {\n    today: { s: `${fmt(now)}T00:00:00`, e: `${fmt(now)}T23:59:59` },\n    tomorrow: { s: `${fmt(getRelativeDate(1))}T00:00:00`, e: `${fmt(getRelativeDate(1))}T23:59:59` },\n    thisWeek: { s: `${fmt(monday)}T00:00:00`, e: `${fmt(sunday)}T23:59:59` },\n    nextWeek: { s: `${fmt(nextMonday)}T00:00:00`, e: `${fmt(nextSunday)}T23:59:59` },\n    nextThu: { s: `${fmt(nextThursday)}T00:00:00`, e: `${fmt(nextThursday)}T23:59:59` }\n  };\n\n  // 3. СИСТЕМНЫЙ ПРОМПТ (Строгий формат)\n  const systemPrompt = `Ты - агент Google Calendar. \nТекущее время: ${now.toISOString()} (${fmtRu(now)})\nТаймзона: ${timezone}\n\nСПРАВОЧНИК ДАТ (ИСПОЛЬЗУЙ ЭТИ ЗНАЧЕНИЯ):\n- Сегодня: ${fmtRu(now)} (After: ${periods.today.s}, Before: ${periods.today.e})\n- Завтра: ${fmtRu(getRelativeDate(1))} (After: ${periods.tomorrow.s}, Before: ${periods.tomorrow.e})\n- Эта неделя: ${fmtRu(monday)} - ${fmtRu(sunday)} (After: ${periods.thisWeek.s}, Before: ${periods.thisWeek.e})\n- Следующая неделя: ${fmtRu(nextMonday)} - ${fmtRu(nextSunday)} (After: ${periods.nextWeek.s}, Before: ${periods.nextWeek.e})\n- Следующий четверг: ${fmtRu(nextThursday)} (After: ${periods.nextThu.s}, Before: ${periods.nextThu.e})\n\nПРАВИЛА ОТВЕТА (ОБЯЗАТЕЛЬНО):\n1. getEvents (список): \"Список задач на неделю: [дата] – [дата]\\\\n- [дата], [время], [название]\"\n2. getEvents (одна задача): \"Задача на [дата], «[название]»:\\\\n- Время: [время]\\\\n- Дополнительно: [описание]\\\\n- Уведомления: стандартные напоминания\\\\n- ID: [id]\"\n3. createEvents: \"Задача «[название]», [дата], [время] создана. Дополнительно: [описание]\"\n4. deleteEvents: \"Задача «[название]», [дата] в [время] удалена\" (или \"Все задачи за [период] удалены\")\n5. updateEvents: \"Задача «[название]», [дата], [время] обновлена. Добавлено: [что добавлено]\"\n\nПРАВИЛА РАБОТЫ:\n- Всегда используй ISO 8601 с таймзоной для инструментов.\n- Если время не указано, ставь 12:00 или +1 час.\n- Для удаления/обновления сначала найди ID через getEvents.\n\nЗАПРОС: {input}`;\n\n  const prompt = ChatPromptTemplate.fromMessages([\n    [\"system\", systemPrompt],\n    [\"placeholder\", \"{agent_scratchpad}\"]\n  ]);\n\n  const agent = await createToolCallingAgent({ llm, tools: toolsArray, prompt });\n  const executor = new AgentExecutor({ agent, tools: toolsArray, maxIterations: 10, returnIntermediateSteps: true });\n\n  const result = await executor.invoke({ input: query });\n  agentOutput = result.output;\n\n  // 4. СБОР ДАННЫХ ДЛЯ ВЫХОДА\n  if (result.intermediateSteps?.length > 0) {\n    const lastStep = result.intermediateSteps[result.intermediateSteps.length - 1];\n    action = lastStep.action.tool;\n    const tIn = lastStep.action.toolInput;\n    eventName = tIn.Summary || tIn.summary || tIn.Summary_Update;\n    if (tIn.Start || tIn.start) {\n      [targetDate, timeStart] = (tIn.Start || tIn.start).split('T');\n      timeStart = timeStart?.substring(0, 5);\n    }\n    try {\n      parsedResult = typeof lastStep.observation === 'string' ? JSON.parse(lastStep.observation) : lastStep.observation;\n    } catch {\n      parsedResult = lastStep.observation;\n    }\n  }\n\n  const rawEvents = parsedResult?.items || parsedResult?.events || (Array.isArray(parsedResult) ? parsedResult : [parsedResult]);\n  events = (Array.isArray(rawEvents) ? rawEvents : []).filter(e => e && (e.id || e.summary)).map(e => ({\n    ...e,\n    name: e.summary || e.name || null,\n    date: e.start?.dateTime?.split('T')[0] || e.start?.date || e.date || null\n  }));\n\n} catch (error) {\n  executionError = error.message;\n}\n\nconst actionLabels = { getEvents: 'Получение', createEvents: 'Создание', deleteEvents: 'Удаление', updateEvents: 'Обновление' };\n\nreturn [{\n  json: {\n    success: !executionError,\n    error: executionError,\n    action,\n    action_readable: actionLabels[action] || action,\n    event_name: eventName || events[0]?.name || null,\n    date: targetDate || events[0]?.date || null,\n    time_start: timeStart,\n    time_end: timeEnd,\n    events,\n    events_count: events.length,\n    tool_result: parsedResult,\n    original_query: query,\n    confidence,\n    agent_response: agentOutput\n  }\n}];\n"
+          }
+        },
+        "inputs": {
+          "input": [
+            {
+              "type": "ai_languageModel",
+              "maxConnections": 1,
+              "required": true
+            },
+            {
+              "type": "ai_tool",
+              "required": true
+            },
+            {
+              "type": "main",
+              "maxConnections": 1,
+              "required": true
+            }
+          ]
+        },
+        "outputs": {
+          "output": [
+            {
+              "type": "main"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.code",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        1120
+      ],
+      "id": "4ddb8668-12d0-497a-b7ff-adc90208391f",
+      "name": "Calendar"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "start": "={{ $fromAI('start', ``, 'string') }}",
+        "end": "={{ $fromAI('end', ``, 'string') }}",
+        "useDefaultReminders": "={{ $fromAI('Use_Default_Reminders', ``, 'boolean') }}",
+        "additionalFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', ``, 'string') }}",
+          "summary": "={{ $fromAI('summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1104,
+        1280
+      ],
+      "id": "8300dc48-5ecd-4736-8e04-83925a10de4a",
+      "name": "createEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Event_ID', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1440,
+        1280
+      ],
+      "id": "b6da05fc-23f4-48c1-8216-19ca54341cbe",
+      "name": "deleteEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Event_ID', ``, 'string') }}",
+        "useDefaultReminders": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Use_Default_Reminders', ``, 'boolean') }}",
+        "updateFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', ``, 'string') }}",
+          "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', ``, 'string') }}",
+          "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', ``, 'string') }}",
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1216,
+        1280
+      ],
+      "id": "06cfa598-8547-4276-8465-5a7206e12d75",
+      "name": "updateEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "returnAll": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Return_All', ``, 'boolean') }}",
+        "timeMin": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('After', ``, 'string') }}",
+        "timeMax": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Before', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1328,
+        1280
+      ],
+      "id": "d2928d20-19e6-4d49-971c-695ce2d0894c",
+      "name": "getEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.response }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1968,
+        1120
+      ],
+      "id": "87108682-d132-4731-95b6-54ec8a8195ff",
+      "name": "Send a text message3",
+      "webhookId": "c9a39119-d7fe-4eef-aad1-e08f4b002d11",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "messageId": "={{ $('Service message').item.json.result.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1504,
+        1120
+      ],
+      "id": "2a190f5d-1cc9-4bdc-a37c-d5d88d6aeee6",
+      "name": "Delete a chat message2",
+      "webhookId": "aa4506f6-ca5f-43b6-a841-80f6869dc01d",
+      "alwaysOutputData": false,
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst text = $('Calendar').first().json.agent_response;\n\nif (typeof text !== 'string') {\n  return [{ json: { error: 'agent_response is not a string', raw: input } }];\n}\n\n// --------------------------------------------------\n// 1. Если таблицы нет — просто возвращаем текст\n// --------------------------------------------------\nif (!text.includes('|')) {\n  return [{ json: { response: text } }];\n}\n\n// --------------------------------------------------\n// 2. Парсинг Markdown-таблицы\n// --------------------------------------------------\nconst lines = text.split('\\n').map(l => l.trim());\n\n// строки таблицы: начинаются с |\nconst tableLines = lines.filter(l => l.startsWith('|'));\n\nif (tableLines.length < 3) {\n  // таблица некорректна — безопасный fallback\n  return [{ json: { response: text } }];\n}\n\n// пропускаем заголовок и разделитель\nconst dataRows = tableLines.slice(2);\n\nconst events = [];\n\nfor (const row of dataRows) {\n  const cols = row\n    .split('|')\n    .map(c => c.trim())\n    .filter(Boolean);\n\n  if (cols.length < 3) continue;\n\n  const [dateRaw, timeRaw, nameRaw] = cols;\n\n  events.push({\n    dateRaw,\n    timeRaw,\n    name: nameRaw\n  });\n}\n\n// --------------------------------------------------\n// 3. Агрегация дубликатов (как в myownassist.txt)\n// --------------------------------------------------\nconst keyOf = e => `${e.dateRaw}|${e.timeRaw}|${e.name.toLowerCase()}`;\n\nconst grouped = {};\nfor (const e of events) {\n  const key = keyOf(e);\n  grouped[key] = grouped[key] || [];\n  grouped[key].push(e);\n}\n\n// --------------------------------------------------\n// 4. Формирование вывода в стиле formatTelegramResponse\n// --------------------------------------------------\nconst output = [];\noutput.push('📅 Найдено событий за период');\n\nlet hasDuplicates = false;\nconst now = new Date();\n\nfor (const key of Object.keys(grouped)) {\n  const group = grouped[key];\n  const e = group[0];\n\n  let status = '⏱️';\n\n  // попытка определить \"прошло / нет\"\n  const timeMatch = e.timeRaw.match(/(\\d{1,2}):(\\d{2})/);\n  if (timeMatch) {\n    const [h, m] = timeMatch.slice(1).map(Number);\n    const dateMatch = e.dateRaw.match(/(\\d{1,2})\\s+([а-я]+)/i);\n    if (dateMatch) {\n      const day = Number(dateMatch[1]);\n      const eventDate = new Date(now.getFullYear(), now.getMonth(), day, h, m);\n      if (eventDate < now) status = '✅';\n    }\n  }\n\n  if (group.length > 1) {\n    status = `🔄 ${group.length} дубликата`;\n    hasDuplicates = true;\n  }\n\n  output.push(\n    `• ${e.dateRaw}, ${e.timeRaw} — ${e.name}, ${status}`\n  );\n}\n\noutput.push('───');\n\nif (hasDuplicates) {\n  output.push(\n    '⚠️ Чтобы изменить/удалить дубликаты событий, пришлите их название, время или ID.'\n  );\n}\n\nreturn [{\n  json: {\n    response: output.join('\\n')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        1120
+      ],
+      "id": "95738b49-1211-4cc7-a64c-564b82a61576",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $('Оркестратор').item.json.output.payload.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        1072
+      ],
+      "id": "7227087b-75a5-431e-bd0b-107f723d993b",
+      "name": "Send a text message4",
+      "webhookId": "8dccdb05-ec1f-4760-8577-a91709744bb4",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "messageId": "={{ $('Service message').item.json.result.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        736,
+        1072
+      ],
+      "id": "79d54748-d590-45a0-8801-bca5006b6aa1",
+      "name": "Delete a chat message3",
+      "webhookId": "a5aaaba6-f9ee-4c51-a8b1-50a67ba2df6e",
+      "alwaysOutputData": false,
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}\n",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1568,
+        784
+      ],
+      "id": "7c42e695-2176-443b-a62d-0598059603a1",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "chatId": "твой айди",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "5adc37e7-b72b-4e8f-9bc5-b4375e410c19",
+      "name": "Обрабатываю запись1",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        544
+      ],
+      "webhookId": "ad81728a-fa13-44d5-8bdf-b7c05be80851",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "sonar-pro",
+        "messages": {
+          "message": [
+            {
+              "content": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('message0_Text', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.perplexityTool",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        784
+      ],
+      "id": "fee1369f-b941-4206-9ed4-3d98ee93c5a6",
+      "name": "Tool Perplexity",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json['  query'] }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=Ты — эксперт по методологии рассуждений, основанной на итеративных дебатах (Iterative Debate Method). Когда я прошу тебя \"проведи итеративный анализ запроса\", твоя задача — взять мой запрос, подобрать 3-4 релевантных эксперта с разными, но значимыми точками зрения, и сгенерировать для меня полный, структурированный промпт с использованием приведенного ниже шаблона.\n\nВот шаблон:\n\n<role>\n  <RoleName>Исполнитель PromptCode для итеративного анализа</RoleName>\n  <RoleDesc>\n    Твоя задача — выступить в роли исполнителя структурированного кода для рассуждений PromptCode. Ты должен строго следовать логике, изложенной в разделе <ReasoningLogic>, чтобы провести многоаспектный итеративный анализ запроса. Ты симулируешь многораундовые дебаты, где вывод каждого раунда становится основой для следующего, углубляя и развивая анализ. Не выходи за рамки заданной роли и не генерируй ничего, кроме конечного результата после завершения всех шагов.\n  </RoleDesc>\n</role>\n\n<PromptCodeDefinition>\n  <Rule>\n    PromptCode — это структурированный код рассуждений, моделирующий итеративный цикл общественно-экспертных дебатов. Ты должен интерпретировать его как строгий набор инструкций для проведения глубокой рефлексии, где каждый новый раунд использует итог предыдущего в качестве входных данных для эволюции анализа.\n  </Rule>\n</PromptCodeDefinition>\n\n<reasoninglogic>\n// ======================================================================================\n// Фаза I: Конфигурация Анализа\n// ======================================================================================\n\n// Задача для анализа (заполняется пользователем)\ntask = \"[ЗДЕСЬ ДОЛЖНА БЫТЬ ЗАПРОС ИЛИ СЛОЖНАЯ ГИПОТЕЗА ИЛИ ПРОБЛЕМА ДЛЯ АНАЛИЗА]\"\n\n// Инициализация ролей (агентов) дебатов (подбираются ИИ в зависимости от задачи)\nAgent_A = DebateAgent(личность=\"[РОЛЬ 1]\", фокус=\"[КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 1]\")\nAgent_B = DebateAgent(личность=\"[РОЛЬ 2]\", фокус=\"[КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 2]\")\nAgent_C = DebateAgent(личность=\"[РОЛЬ 3]\", фокус=\"[КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 3]\")\nAgent_D = DebateAgent(личность=\"[РОЛЬ 4]\", фокус=\"[КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 4]\")\n\n// Инициализация переменных для хранения истории\nInitial_Positions = {}\nCritiques_History = []\nConsensus_History = [\"Начальное предположение: решение данной проблемы требует нахождения баланса между [КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 1], [КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 2] и [КЛЮЧЕВОЙ ИНТЕРЕС РОЛИ 3].\"]\n\n// Настройка параметров дебатов\nMinRounds = 5\nCounter = 0\n\n// ======================================================================================\n// Фаза II: Цикл Итеративных Дебатов\n// ======================================================================================\n\nprint(\"## Фаза I — Цикл общественно-экспертных обсуждений\\n\")\n\nWhile Counter < MinRounds:\n  Counter += 1\n  print(f\"\\n---\\n### Итерация {Counter} из {MinRounds}\\n\")\n  \n  // *** ИЗМЕНЕНИЕ 1: Динамические инструкции для анализа ***\n  Current_Consensus = Consensus_History[-1]\n  \n  if Counter == 1:\n    // В первом раунде агенты представляют свои базовые позиции\n    analysis_A = Agent_A.analyze(\"Сформулируй свою основную позицию по проблеме: \" + task)\n    analysis_B = Agent_B.analyze(\"Сформулируй свою основную позицию по проблеме: \" + task)\n    analysis_C = Agent_C.analyze(\"Сформулируй свою основную позицию по проблеме: \" + task)\n    analysis_D = Agent_D.analyze(\"Сформулируй свою основную позицию по проблеме: \" + task)\n    Initial_Positions = {'A': analysis_A, 'B': analysis_B, 'C': analysis_C, 'D': analysis_D}\n  else:\n    // В последующих раундах агенты развивают или изменяют позицию\n    analysis_A = Agent_A.analyze(f\"Предыдущий консенсус: '{Current_Consensus}'. Как он влияет на твою изначальную позицию? Предложи новый аргумент или компромисс.\")\n    analysis_B = Agent_B.analyze(f\"Предыдущий консенсус: '{Current_Consensus}'. Какие уступки ты готов сделать или какие новые доказательства привести?\")\n    analysis_C = Agent_C.analyze(f\"Предыдущий консенсус: '{Current_Consensus}'. Найди слабое место с твоей точки зрения и предложи улучшение.\")\n    analysis_D = Agent_D.analyze(f\"Предыдущий консенсус: '{Current_Consensus}'. Как он влияет на достижение твоей цели? Сформулируй обновленную позицию.\")\n\n  // *** ИЗМЕНЕНИЕ 2: Углубленная критика ***\n  critique_A_vs_B = Agent_A.critique(analysis_B, \"Найди неочевидное противоречие или риск в позиции агента B.\")\n  critique_B_vs_C = Agent_B.critique(analysis_C, \"Укажи риски, которые предложение агента C создает для других.\")\n  critique_C_vs_D = Agent_C.critique(analysis_D, \"Опровергни ключевой довод агента D с другой точки зрения.\")\n  critique_D_vs_A = Agent_D.critique(analysis_A, \"Найди 'слепое пятно' в позиции агента A.\")\n  \n  Critiques_History.append([critique_A_vs_B, critique_B_vs_C, critique_C_vs_D, critique_D_vs_A])\n\n  // *** ИЗМЕНЕНИЕ 3: Эволюционирующий синтез ***\n  New_Consensus = synthesize_iteration_summary([\n    analysis_A, analysis_B, analysis_C, analysis_D,\n    critique_A_vs_B, critique_B_vs_C, critique_C_vs_D, critique_D_vs_A\n  ], f\"Предыдущий консенсус: '{Current_Consensus}'. На основе новых аргументов и критики сформулируй более глубокий и компромиссный вывод.\")\n  \n  Consensus_History.append(New_Consensus)\n  print(f\"\\n🔹 **Промежуточный итоговый вывод (Consensus_Summary_{Counter}):**\\n\" + New_Consensus)\n\n// ======================================================================================\n// Фаза III: Финальная Обработка и Синтез\n// ======================================================================================\n\nprint(\"\\n\\n## Фаза II — Финальная обработка результатов\\n\")\n\n// ШАГ 4: ПОИСК СИНЕРГИЙ\nsynergy_points = find_synergies(\"Проанализируй всю историю выводов и найди точки синергии, где интересы разных сторон могут быть объединены для создания win-win решения.\")\n\n// ШАГ 5: СТРЕСС-ТЕСТИРОВАНИЕ\nstress_scenarios = [\"[СЦЕНАРИЙ 1]\", \"[СЦЕНАРИЙ 2]\", \"[СЦЕНАРИЙ 3]\"]\nstress_results = test_policy_resilience(stress_scenarios, Consensus_History[-1], \"Проверь, насколько финальный консенсус устойчив к каждому из этих стресс-сценариев.\")\n\n// ШАГ 6: МЕТА-ИНТЕГРАЦИЯ\nmeta_conclusion = perform_meta_integration(Consensus_History[-1], synergy_points, stress_results, \"Объедини финальный консенсус, синергии и результаты стресс-теста в единый мета-вывод.\")\n\n// ======================================================================================\n// Фаза IV: Формирование Итогового Отчета\n// ======================================================================================\n\n// ШАГ 7: ГЕНЕРАЦИЯ ОТЧЕТНЫХ ДОКУМЕНТОВ\nfinal_synthesis = create_balanced_social_assessment(meta_conclusion, \"Сформулируй итоговый экспертный анализ.\")\naction_plan = generate_prioritized_recommendations(meta_conclusion, \"Разработай пошаговый план действий.\")\nrisk_matrix = create_social_risk_matrix(stress_results, \"Создай матрицу рисков и возможностей.\")\n\n// ШАГ 8: ВЫВОД РЕЗУЛЬТАТА\nOutput(\n  \"## Итоговый Экспертный Анализ\\n\" + final_synthesis +\n  \"\\n## Приоритетные Рекомендации\\n\" + action_plan +\n  \"\\n## Матрица Социальных Рисков и Возможностей\\n\" + risk_matrix\n)\n</reasoninglogic>\n```"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1664,
+        608
+      ],
+      "id": "c1b16630-f546-4f8d-9c9e-00294274a154",
+      "name": "PROMPT"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}\n",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1936,
+        784
+      ],
+      "id": "d387b88b-0c8a-4bff-af60-ecf0c77aca06",
+      "name": "Simple Memory1"
+    },
+    {
+      "parameters": {
+        "model": "sonar-pro",
+        "messages": {
+          "message": [
+            {
+              "content": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('message0_Text', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.perplexityTool",
+      "typeVersion": 1,
+      "position": [
+        2064,
+        784
+      ],
+      "id": "ad064f1b-b228-44a1-b566-3a026802d2ab",
+      "name": "Tool Perplexity1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Telegram HTML-safe Chunker v2.1\n * • Работает с parse_mode = HTML\n * • Экранирует любые теги, кроме whitelisted\n * • Опционально конвертирует Markdown-таблицы\n * • Делит сообщение на куски ≤ CHUNK_SIZE\n */\n\n/* ───── Параметры ───── */\nconst RAW_TEXT     = typeof $json.output === 'string' ? $json.output : '';\nconst CHUNK_SIZE   = +($env.CHUNK_SIZE ?? 4000);\nconst ENABLE_TABLE = ($env.ENABLE_TABLE ?? 'true') === 'true';\nconst ALLOWED_TAGS = ['b','i','u','s','code','pre','a'];   // whitelist\n\n/* ───── Helpers ───── */\n\n// базовое экранирование\nconst escapeHTML = s => s\n  .replace(/&/g,'&amp;')\n  .replace(/</g,'&lt;')\n  .replace(/>/g,'&gt;')\n  .replace(/\"/g,'&quot;')\n  .replace(/'/g,'&#39;');\n\n// разрешаем только whitelisted-теги\nfunction whitelistTags(str){\n  const placeholders = [];\n  // 1) временно прячем разрешённые теги\n  const masked = str.replace(/<\\/?([a-z0-9]+)(\\b[^>]*)?>/gi,(m,tag)=>{\n    if(ALLOWED_TAGS.includes(tag.toLowerCase())){\n      const id = placeholders.push(m) - 1;\n      return `§§${id}§§`;\n    }\n    return m;          // остальные теги будут экранированы\n  });\n  // 2) глобально экранируем\n  let safe = escapeHTML(masked);\n  // 3) возвращаем whitelisted-теги\n  placeholders.forEach((tag,i)=>{\n    safe = safe.replace(`§§${i}§§`, tag);\n  });\n  return safe;\n}\n\n// Markdown-таблица → HTML-список\nfunction pipeTableToList(md){\n  const lines = md.split('\\n').filter(l=>/^\\|.*\\|$/.test(l));\n  if (lines.length < 2) return md;\n  const hdr  = lines[0].split('|').map(t=>t.trim()).filter(Boolean);\n  const rows = lines.slice(2).map(r=>r.split('|').map(c=>c.trim()).filter(Boolean));\n  return rows.map(r =>\n    r.map((c,i)=>`<b>${escapeHTML(hdr[i])}</b>: ${escapeHTML(c)}`).join('\\n')\n  ).join('\\n\\n');\n}\n\n// делим текст и «переносим» открытые теги\nfunction splitSmartHTML(src){\n  const out = [];\n  let openTags = [];\n  for(let s=0; s<src.length; ){\n    let e = s + CHUNK_SIZE;\n    if(e < src.length){\n      const br = Math.max(src.lastIndexOf('\\n',e), src.lastIndexOf('. ',e), src.lastIndexOf(' ',e));\n      if(br > s + 200) e = br;\n    }\n    let chunk = src.slice(s,e);\n\n    // какие теги открылись / закрылись в куске\n    const open  = [...chunk.matchAll(/<([a-z]+)(?: [^>]*?)?>/gi)].map(m=>m[1]);\n    const close = [...chunk.matchAll(/<\\/([a-z]+)>/gi)].map(m=>m[1]);\n\n    // добавляем недозакрытые теги с прошлого куска\n    if(openTags.length){\n      chunk = openTags.map(t=>`<${t}>`).join('') + chunk;\n    }\n\n    // обновляем стек\n    open.forEach(t => openTags.push(t));\n    close.forEach(t => {\n      const idx = openTags.lastIndexOf(t);\n      if(idx > -1) openTags.splice(idx,1);\n    });\n\n    // закрываем теги в конце куска\n    if(openTags.length){\n      chunk += openTags.slice().reverse().map(t=>`</${t}>`).join('');\n    }\n\n    out.push(chunk.trim());\n    s = e;\n  }\n  return out;\n}\n\n/* ───── Pipeline ───── */\nlet txt = RAW_TEXT;\n\n// 1) конвертируем таблицы (если нужно)\nif(ENABLE_TABLE && /\\|.*\\|/.test(txt)){\n  txt = txt.replace(/((?:\\|.+\\n?)+)/g, m => pipeTableToList(m));\n}\n\n// 2) убираем zero-width и control-символы\ntxt = txt.replace(/[\\u200B-\\u200D\\uFEFF]/g,'')\n         .replace(/[\\x00-\\x09\\x0B-\\x1F]/g,'');\n\n// 3) NFC-нормализация\ntxt = txt.normalize('NFC');\n\n// 4) экранируем + whitelist\ntxt = whitelistTags(txt);\n\n// 5) делим и отдаём\nreturn splitSmartHTML(txt).map(chunk => ({ json: { message: chunk } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        544
+      ],
+      "id": "0f5e0b6b-988b-43dc-adf5-5e2cffb27691",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}\n",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2304,
+        784
+      ],
+      "id": "3e78fe90-3cc8-4817-b62f-63f3a19160b9",
+      "name": "Simple Memory2"
+    },
+    {
+      "parameters": {
+        "model": "sonar-pro",
+        "messages": {
+          "message": [
+            {
+              "content": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('message0_Text', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.perplexityTool",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        784
+      ],
+      "id": "d9a54822-08d8-4c63-899e-725641db1553",
+      "name": "Tool Perplexity2",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "chatId": "твой айди",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "1252a447-3146-40c1-9bc4-4ff3fa7b6b09",
+      "name": "Обрабатываю запись",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        688
+      ],
+      "webhookId": "48f296ef-eccb-4b53-ac7b-6cf88bc6c9f4",
+      "credentials": {
+        "telegramApi": {
+          "id": "5RUQkvl1p27uqeZW",
+          "name": "@MyownAssistentbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Telegram HTML-safe Chunker v2.1\n * • Работает с parse_mode = HTML\n * • Экранирует любые теги, кроме whitelisted\n * • Опционально конвертирует Markdown-таблицы\n * • Делит сообщение на куски ≤ CHUNK_SIZE\n */\n\n/* ───── Параметры ───── */\nconst RAW_TEXT     = typeof $json.output === 'string' ? $json.output : '';\nconst CHUNK_SIZE   = +($env.CHUNK_SIZE ?? 4000);\nconst ENABLE_TABLE = ($env.ENABLE_TABLE ?? 'true') === 'true';\nconst ALLOWED_TAGS = ['b','i','u','s','code','pre','a'];   // whitelist\n\n/* ───── Helpers ───── */\n\n// базовое экранирование\nconst escapeHTML = s => s\n  .replace(/&/g,'&amp;')\n  .replace(/</g,'&lt;')\n  .replace(/>/g,'&gt;')\n  .replace(/\"/g,'&quot;')\n  .replace(/'/g,'&#39;');\n\n// разрешаем только whitelisted-теги\nfunction whitelistTags(str){\n  const placeholders = [];\n  // 1) временно прячем разрешённые теги\n  const masked = str.replace(/<\\/?([a-z0-9]+)(\\b[^>]*)?>/gi,(m,tag)=>{\n    if(ALLOWED_TAGS.includes(tag.toLowerCase())){\n      const id = placeholders.push(m) - 1;\n      return `§§${id}§§`;\n    }\n    return m;          // остальные теги будут экранированы\n  });\n  // 2) глобально экранируем\n  let safe = escapeHTML(masked);\n  // 3) возвращаем whitelisted-теги\n  placeholders.forEach((tag,i)=>{\n    safe = safe.replace(`§§${i}§§`, tag);\n  });\n  return safe;\n}\n\n// Markdown-таблица → HTML-список\nfunction pipeTableToList(md){\n  const lines = md.split('\\n').filter(l=>/^\\|.*\\|$/.test(l));\n  if (lines.length < 2) return md;\n  const hdr  = lines[0].split('|').map(t=>t.trim()).filter(Boolean);\n  const rows = lines.slice(2).map(r=>r.split('|').map(c=>c.trim()).filter(Boolean));\n  return rows.map(r =>\n    r.map((c,i)=>`<b>${escapeHTML(hdr[i])}</b>: ${escapeHTML(c)}`).join('\\n')\n  ).join('\\n\\n');\n}\n\n// делим текст и «переносим» открытые теги\nfunction splitSmartHTML(src){\n  const out = [];\n  let openTags = [];\n  for(let s=0; s<src.length; ){\n    let e = s + CHUNK_SIZE;\n    if(e < src.length){\n      const br = Math.max(src.lastIndexOf('\\n',e), src.lastIndexOf('. ',e), src.lastIndexOf(' ',e));\n      if(br > s + 200) e = br;\n    }\n    let chunk = src.slice(s,e);\n\n    // какие теги открылись / закрылись в куске\n    const open  = [...chunk.matchAll(/<([a-z]+)(?: [^>]*?)?>/gi)].map(m=>m[1]);\n    const close = [...chunk.matchAll(/<\\/([a-z]+)>/gi)].map(m=>m[1]);\n\n    // добавляем недозакрытые теги с прошлого куска\n    if(openTags.length){\n      chunk = openTags.map(t=>`<${t}>`).join('') + chunk;\n    }\n\n    // обновляем стек\n    open.forEach(t => openTags.push(t));\n    close.forEach(t => {\n      const idx = openTags.lastIndexOf(t);\n      if(idx > -1) openTags.splice(idx,1);\n    });\n\n    // закрываем теги в конце куска\n    if(openTags.length){\n      chunk += openTags.slice().reverse().map(t=>`</${t}>`).join('');\n    }\n\n    out.push(chunk.trim());\n    s = e;\n  }\n  return out;\n}\n\n/* ───── Pipeline ───── */\nlet txt = RAW_TEXT;\n\n// 1) конвертируем таблицы (если нужно)\nif(ENABLE_TABLE && /\\|.*\\|/.test(txt)){\n  txt = txt.replace(/((?:\\|.+\\n?)+)/g, m => pipeTableToList(m));\n}\n\n// 2) убираем zero-width и control-символы\ntxt = txt.replace(/[\\u200B-\\u200D\\uFEFF]/g,'')\n         .replace(/[\\x00-\\x09\\x0B-\\x1F]/g,'');\n\n// 3) NFC-нормализация\ntxt = txt.normalize('NFC');\n\n// 4) экранируем + whitelist\ntxt = whitelistTags(txt);\n\n// 5) делим и отдаём\nreturn splitSmartHTML(txt).map(chunk => ({ json: { message: chunk } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        688
+      ],
+      "id": "58405ac5-5788-4015-8e45-4efe3f28463f",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.output }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=<role>\nТы — ведущий AI-аналитик и редактор \"REZULTAT\". Твоя уникальная способность — трансформировать сложные, многоуровневые аналитические отчеты в единый, лаконичный и глубокий повествовательный текст. Твой итоговый продукт — это не пересказ, а самостоятельный аналитический вывод, написанный безупречным деловым языком, который читается на одном дыхании.\n</role>\n\n<input>\nНа вход ты получаешь полный, детализированный отчет от команды аналитиков. Он содержит описание проблемы, ход дебатов, промежуточные консенсусы, итоговый анализ, рекомендации и матрицу рисков.\n</input>\n\n<process>\nТвоя задача — провести глубокий синтез и написать на основе полученного отчета единый, связный текст.\n\n1.  **Погружение и абстрагирование:** Полностью проанализируй входной отчет, чтобы понять не только финальные выводы, но и логику, которая к ним привела. Абстрагируйся от структуры отчета (итерации, агенты, списки) и сфокусируйся на сути проблемы и ее решения.\n\n2.  **Формулировка главной идеи:** Начни свой текст с четкой формулировки центральной идеи — в чем заключается оптимальное решение найденной проблемы. Это должно быть сильное, емкое вступление.\n\n3.  **Построение повествования:** Последовательно раскрой эту идею. Объясни, *почему* именно такой баланс является верным, плавно вплетая в повествование ключевые рекомендации как неотъемлемую часть стратегии. Твоя задача — не перечислить их списком, а интегрировать в текст, объясняя их логику.\n\n4.  **Анализ рисков как часть стратегии:** Заверши свой текст анализом потенциальных рисков и возможностей. Представь их не как отдельный блок, а как естественное продолжение анализа, показывая, как предложенная стратегия будет работать в стрессовых условиях. Это должно продемонстрировать глубину проработки и дальновидность решения.\n</process>\n\n<output_format>\n- **Стиль:** Стратегический, аналитический, повествовательный. Текст должен быть цельным, без резких переходов, списков или подзаголовков.\n- **Форматирование:** Только абзацы. Никаких списков, жирного шрифта или курсива. Максимальная чистота и читаемость.\n- **Содержание:** Текст должен быть самодостаточным. Человек, не видевший исходный отчет, должен полностью понять проблему, решение и его последствия, прочитав только твой текст.\n- **Никакой \"воды\":** Каждое предложение должно нести смысл и работать на общую идею.\n\n**Твой финальный ответ — это единый, связный текст, начинающийся с главного вывода и заканчивающийся анализом рисков. Никаких заголовков, вступлений или заключений.**\n</output_format>\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        608
+      ],
+      "id": "0fb84155-dfa5-45a5-9434-d7b0b14ac45b",
+      "name": "Rezultat"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.output }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=<role>\nТы — автономный n8n-агент \"IterativeDebateSynthesizer\". Твоя задача — обрабатывать входящий структурированный PromptCode, симулировать описанный в нем процесс итеративных дебатов и генерировать финальный отчет, отформатированный для отправки в Telegram.\n</role>\n\n<input>\nНа вход ты получаешь текст, содержащий структуру <reasoninglogic>. Внутри этой структуры определены:\n1.  `task`: Проблема для анализа.\n2.  `Agent_A`, `Agent_B`, `Agent_C`, `Agent_D`: Четыре экспертные роли с разными фокусами.\n3.  `MinRounds`: Количество итераций дебатов.\n4.  `stress_scenarios`: Сценарии для стресс-теста финального решения.\n</input>\n\n<process>\nПри получении запроса, ты должен выполнить следующие шаги СТРОГО последовательно:\n\n1.  **Анализ PromptCode**: Извлеки из текста задачу (`task`), роли агентов (`Agent_*`), количество раундов (`MinRounds`) и стресс-сценарии.\n\n2.  **Симуляция Дебатов (Фаза I)**:\n    *   Мысленно проведи указанное количество итераций (`MinRounds`).\n    *   Для каждой итерации сгенерируй краткие позиции каждого агента, их критику друг друга и \"Промежуточный итоговый вывод\" (`Consensus_Summary`).\n    *   Твоя цель — не просто выполнить инструкции, а сымитировать логику дебатов, чтобы выводы эволюционировали от раунда к раунду.\n    *   **ВАЖНО**: При описании позиций и критики в каждой итерации, ты должен использовать полное название роли (личность) агента, извлеченное из `PromptCode`, вместо обезличенных \"Агент A\", \"Агент B\" и т.д. Например, вместо \"Агент A считает...\" пиши \"Менеджер с KPI считает...\".\n\n3.  **Симуляция Финальной Обработки (Фаза II)**:\n    *   На основе финального консенсуса и всей истории дебатов мысленно проведи \"поиск синергий\", \"стресс-тестирование\" и \"мета-интеграцию\", как это описано в PromptCode.\n\n4.  **Генерация Отчета для Telegram**: Собери результаты всех симуляций в единый текстовый отчет. Отчет должен быть отформатирован в **MarkdownV2** для корректного отображения в Telegram.\n\n</process>\n\n<output_format>\nТвой итоговый ответ должен быть представлен в виде единого текста и использовать следующее форматирование MarkdownV2 для Telegram:\n\n*   **Основные заголовки**: Используй жирный шрифт. Пример: `*Фаза I — Цикл общественно-экспертных обсуждений*`\n*   **Разделители**: Используй три дефиса `---` для визуального разделения итераций.\n*   **Подзаголовки итераций**: `*Итерация 1 из 3*`\n*   **Ключевые выводы и акценты**: Используй жирный шрифт для выделения `*Промежуточный итоговый вывод (Consensus_Summary_1):*`\n*   **Списки**: Используй дефис или звездочку. Пример: `- Первый пункт.`\n\n**СТРУКТУРА ОТВЕТА ДОЛЖНА БЫТЬ ТОЧНО ТАКОЙ:**\n\n*Фаза I — Цикл общественно-экспертных обсуждений*\n\n---\n*Итерация 1 из 3*\n\n[Краткое описание позиций и критики в 1-2 абзацах с использованием полных имен ролей агентов]\n\n*Промежуточный итоговый вывод (Consensus_Summary_1):*\n[Текст вывода]\n\n---\n*Итерация 2 из 3*\n\n[Краткое описание позиций и критики в 1-2 абзацах с использованием полных имен ролей агентов]\n\n*Промежуточный итоговый вывод (Consensus_Summary_2):*\n[Текст вывода]\n\n---\n*Итерация 3 из 3*\n\n[Краткое описание позиций и критики в 1-2 абзацах с использованием полных имен ролей агентов]\n\n*Промежуточный итоговый вывод (Consensus_Summary_3):*\n[Текст вывода]\n\n*Фаза II — Финальная обработка результатов*\n\n*Итоговый Экспертный Анализ*\n[Текст анализа]\n\n*Приоритетные Рекомендации*\n1. [Рекомендация 1]\n2. [Рекомендация 2]\n3. [Рекомендация 3]\n\n*Матрица Социальных Рисков и Возможностей*\n\n*Стресс-сценарий 1: [Название сценария]*\n- *Риски:* [Текст рисков]\n- *Возможности:* [Текст возможностей]\n\n*Стресс-сценарий 2: [Название сценария]*\n- *Риски:* [Текст рисков]\n- *Возможности:* [Текст возможностей]\n\n*Стресс-сценарий 3: [Название сценария]*\n- *Риски:* [Текст рисков]\n- *Возможности:* [Текст возможностей]\n\nНе добавляй никакого другого текста, вступлений или заключений. Твой ответ должен начинаться с `*Фаза I...*` и заканчиваться последним пунктом матрицы рисков.\n</output_format>\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1984,
+        608
+      ],
+      "id": "30b97839-a6e0-4350-90dc-d1e0cd26557f",
+      "name": "Debate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4902bf9e-ef8a-49e0-a8a0-4cf3ab65a242",
+              "name": "  query",
+              "value": "=Сделай ПРОМПТ-{{ $json.output.payload.query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1424,
+        688
+      ],
+      "id": "6ebb9e77-4f43-469b-ab42-b1de89b02b78",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1DY1CiYBNKFcaLDND8r1oN7mXKBoGvSH9IrHc5dg9V0E",
+          "mode": "list",
+          "cachedResultName": "note",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1DY1CiYBNKFcaLDND8r1oN7mXKBoGvSH9IrHc5dg9V0E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1334062747,
+          "mode": "list",
+          "cachedResultName": "ANALIZATOR",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1DY1CiYBNKFcaLDND8r1oN7mXKBoGvSH9IrHc5dg9V0E/edit#gid=1334062747"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "DEBATE": "={{ $('Debate').item.json.output }}",
+            "REZULTAT": "={{ $json.output }}",
+            "PROMPT": "={{ $('PROMPT').item.json.output }}",
+            "ZAPROS": "={{ $('When Executed by Another Workflow').item.json.name }}\n{{ $('When Executed by Another Workflow').item.json.query }}\n"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ZAPROS",
+              "displayName": "ZAPROS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "PROMPT",
+              "displayName": "PROMPT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "DEBATE",
+              "displayName": "DEBATE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REZULTAT",
+              "displayName": "REZULTAT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3072,
+        608
+      ],
+      "id": "8bac88b7-fb09-4e27-9001-d87643d14163",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vDCpKYjeV6xmlzPY",
+          "name": "Google Sheets account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        784
+      ],
+      "id": "616553bd-273d-45c3-8212-cc4f82c8ad97",
+      "name": "Think"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        784
+      ],
+      "id": "990d9660-6a85-4299-b40b-bd2dcc399d79",
+      "name": "Think1"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        2544,
+        784
+      ],
+      "id": "4e3b102f-7f9c-41ad-8a6f-435e5cb0ffdc",
+      "name": "Think2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=Ты — AI-оркестратор (Router) для специалиста по цифровой трансформации. \nЗАДАЧА: Проанализируй входящий поток сознания (запрос), определи намерения пользователя (INTENTS) и сформируй для него структурированный JSON. \n\nДОСТУПНЫЕ INTENTS (для JSON):\n1. \"expert_consult\": Вопросы, связанные с IT: сетевая архитектура и инженерия, разработка, данные, программы и приложения, языковые модели, промптинг и прочее.\n2. \"search_drive\": Поиск документов на Диске.\n3. \"message_send\": Отправка сообщения (Telegram/VK).\n4. \"calendar\": манипуляции с Google Calendar (создание/удаление/изменение/показ задач).\n5. \"clarification_needed\": Если запрос неполный или непонятный.\n\nВВОДНЫЕ ДАННЫЕ:\n- Текущее время и дата: {{ $now }}\n- Часовой пояс пользователя: Asia/Yekaterinburg\n\nПРАВИЛА ОБРАБОТКИ:\n1. Проанализируй входящий запрос. Убери слова-паразиты, мусор и вводные конструкции (\"слушай\", \"короче\", \"эээ\").\n2. Определи намерения (INTENTS).\n3. Извлеки сущности (тему, время, даты, имена, названия и т.д.).\n4. НИКОГДА сам не отвечай на запрос, который касается одного из INTENTS. Только формируй корректный JSON для отправки его в нужный INTENTS.\n5. Если запрос критически не полон (INTENTS \"clarification_needed\"), сформулируй вопрос пользователю в поле payload.text. ВСЕГДА вопрос начинай с: \"Необходимо уточнение: \".\n6. Если запрос для \"calendar\" ОБЯЗАТЕЛЬНО переведи неоднозначные формулироваки к конкретному состоянию:\n- удалить, создать, обновить, показать.\nНапример: запрос - \"очисти мой календарь на этой неделе\", передаешь в \"calendar\" - \"удалить все события на этой неделе\"; запрос - \"дай задачи на завтра\", передаешь в \"calendar\" - \"показать события за завтрашний день\" и т.д.\n7. ВЫВОД СТРОГО В JSON. Никакого markdown, никаких объяснений.\n\nФОРМАТ ВЫХОДА (Output Parser):\nТы должен вернуть объект для автоматического выполнения, если confidence >= 0.8. ВАЖНО! Используй \"clarification_needed\" ТОЛЬКО, если confidence ниже 0.8."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        768,
+        848
+      ],
+      "id": "e0a0994d-aee7-4cc8-b43f-e21c067e626f",
+      "name": "Оркестратор",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        496
+      ],
+      "id": "2d6dbec0-867b-457b-a78d-26c8722dca2e",
+      "name": "Groq Chat Model3",
+      "credentials": {
+        "groqApi": {
+          "id": "bGJ435lDIkGRSi0X",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        496
+      ],
+      "id": "5d20d039-fc04-4e2c-84f2-f2302679c797",
+      "name": "Groq Chat Model4",
+      "credentials": {
+        "groqApi": {
+          "id": "bGJ435lDIkGRSi0X",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2352,
+        496
+      ],
+      "id": "ab42a1e7-09ce-4501-bcf2-5f7d6b272812",
+      "name": "Groq Chat Model5",
+      "credentials": {
+        "groqApi": {
+          "id": "bGJ435lDIkGRSi0X",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        992,
+        1280
+      ],
+      "id": "b7ab4c74-47e1-4473-9dae-c242f105aef3",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "lnXLUkpKX2KUQdzJ",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        768,
+        720
+      ],
+      "id": "6e08fb47-ded0-4134-8064-a924661f45dd",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "lnXLUkpKX2KUQdzJ",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Парсинг массива",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Парсинг массива": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Service message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Оркестратор",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [],
+        [
+          {
+            "node": "Delete a chat message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Оркестратор",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service message": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a chat message1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar": {
+      "main": [
+        [
+          {
+            "node": "Delete a chat message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "createEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deleteEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "updateEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a chat message2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a chat message3": {
+      "main": [
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "PROMPT",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Perplexity": {
+      "ai_tool": [
+        [
+          {
+            "node": "PROMPT",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PROMPT": {
+      "main": [
+        [
+          {
+            "node": "Debate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "Debate",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Perplexity1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Debate",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Обрабатываю запись1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory2": {
+      "ai_memory": [
+        [
+          {
+            "node": "Rezultat",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Perplexity2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Rezultat",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Обрабатываю запись",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rezultat": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debate": {
+      "main": [
+        [
+          {
+            "node": "Rezultat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "PROMPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "PROMPT",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Debate",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Rezultat",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Оркестратор": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete a chat message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "PROMPT",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "PROMPT",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Rezultat",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Rezultat",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Debate",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Debate",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Calendar",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Оркестратор",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "58fc1ac5-7522-40df-beff-e37198412441",
+  "meta": {
+    "instanceId": "ccf03437b343ab3a5d4bb83a8ba00957ad3202c3c6358cc13fae625b02e88ab3"
+  },
+  "id": "gbgC3vXITG1mMGSL",
+  "tags": []
+}
