@@ -1,0 +1,485 @@
+{
+  "name": "Assistent-Refactored",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "{{env.TELEGRAM_CREDENTIAL_ID}}",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Валидация входных данных\nconst message = $input.first().json.message;\n\nif (!message || !message.text || !message.chat) {\n  throw new Error('Некорректное сообщение: отсутствует текст или chat.id');\n}\n\nconst text = message.text.trim();\nif (text.length === 0) {\n  throw new Error('Пустое сообщение');\n}\n\n// Rate limiting check (простая реализация)\nconst chatId = message.chat.id;\nconst now = Date.now();\nconst oneMinuteAgo = now - 60000;\n\n// Возвращаем очищенные данные\nreturn {\n  json: {\n    chatId: chatId,\n    userId: message.from?.id || chatId,\n    text: text,\n    messageId: message.message_id,\n    timestamp: now,\n    firstName: message.from?.first_name || 'User',\n    userName: message.from?.username || null\n  }\n};"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.text.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "календарь|встреча|событие|напомин|запланируй|запиши|дата|время|когда|через|завтра|сегодня|неделю|месяц"
+            }
+          ]
+        }
+      },
+      "id": "router",
+      "name": "Intent Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Skill-based Memory Manager\n// Консолидированное управление памятью для всех агентов\n\nconst chatId = $('Validate Input').item.json.chatId;\nconst userId = $('Validate Input').item.json.userId;\nconst text = $('Validate Input').item.json.text;\nconst timestamp = Date.now();\n\n// Получаем текущую историю из предыдущего шага или создаем новую\nlet memoryData = {};\ntry {\n  // Пытаемся получить из предыдущего состояния (если есть)\n  memoryData = $(this).first().json.memory || {};\n} catch (e) {\n  memoryData = {};\n}\n\n// Инициализируем структуру памяти для чата, если нет\nif (!memoryData[chatId]) {\n  memoryData[chatId] = {\n    userId: userId,\n    sessionStart: timestamp,\n    lastActivity: timestamp,\n    messages: [],\n    context: {\n      currentAgent: null,\n      activeSkills: [],\n      preferences: {}\n    },\n    metadata: {\n      totalMessages: 0,\n      errors: []\n    }\n  };\n}\n\n// Добавляем новое сообщение (храним последние 10 для контекста)\nconst newMessage = {\n  role: 'user',\n  content: text,\n  timestamp: timestamp,\n  detectedIntent: null // Будет заполнено оркестратором\n};\n\nmemoryData[chatId].messages.push(newMessage);\nmemoryData[chatId].lastActivity = timestamp;\nmemoryData[chatId].metadata.totalMessages++;\n\n// Ограничиваем историю последними 10 сообщениями\nif (memoryData[chatId].messages.length > 10) {\n  memoryData[chatId].messages = memoryData[chatId].messages.slice(-10);\n}\n\n// Обновляем метаданные сессии\nconst sessionDuration = timestamp - memoryData[chatId].sessionStart;\nmemoryData[chatId].metadata.sessionDuration = sessionDuration;\n\nreturn {\n  json: {\n    chatId,\n    userId,\n    text,\n    memory: memoryData,\n    chatHistory: memoryData[chatId].messages,\n    context: memoryData[chatId].context,\n    metadata: memoryData[chatId].metadata\n  }\n};"
+      },
+      "id": "memory-manager",
+      "name": "Memory Manager",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Orchestrator with Skill-Based Architecture\n// Минимальный промпт + динамический skill registry\n\nconst text = $('Memory Manager').item.json.text;\nconst chatHistory = $('Memory Manager').item.json.chatHistory;\nconst context = $('Memory Manager').item.json.context;\n\n// Skill Registry - компактное описание возможностей\nconst skills = [\n  {\n    id: 'calendar',\n    name: 'Calendar Agent',\n    keywords: ['календарь', 'встреча', 'событие', 'напомин', 'запланируй', 'запиши', 'дата', 'время', 'когда', 'через', 'завтра', 'сегодня', 'неделю', 'месяц'],\n    description: 'Управление календарем: создание, чтение, обновление, удаление событий',\n    enabled: true\n  },\n  {\n    id: 'clarification',\n    name: 'Clarification Agent',\n    keywords: ['не понял', 'уточни', 'что значит', 'как', 'почему', 'объясни'],\n    description: 'Запрос уточнений у пользователя при неоднозначности',\n    enabled: true\n  },\n  {\n    id: 'default',\n    name: 'Default Chat',\n    keywords: [],\n    description: 'Обычный разговор, ответы на общие вопросы',\n    enabled: true\n  }\n];\n\n// Простой классификатор на основе ключевых слов\nconst textLower = text.toLowerCase();\nlet detectedSkill = skills.find(s => \n  s.enabled && s.keywords.some(k => textLower.includes(k))\n);\n\n// Если не найдено точное совпадение, используем дефолт\nif (!detectedSkill) {\n  detectedSkill = skills.find(s => s.id === 'default');\n}\n\n// Формируем минимальный контекст для выбранного скилла\nconst skillContext = {\n  selectedSkill: detectedSkill.id,\n  skillName: detectedSkill.name,\n  skillDescription: detectedSkill.description,\n  confidence: detectedSkill.id === 'default' ? 0.5 : 0.9\n};\n\n// Сокращаем историю до последних 5 сообщений для экономии токенов\nconst recentHistory = chatHistory.slice(-5).map(msg => \n  `${msg.role}: ${msg.content}`\n).join('\\n');\n\nreturn {\n  json: {\n    ...$('Memory Manager').item.json,\n    orchestrator: {\n      detectedIntent: detectedSkill.id,\n      selectedAgent: detectedSkill.name,\n      skillRegistry: skills.filter(s => s.enabled),\n      skillContext: skillContext,\n      confidence: skillContext.confidence,\n      recentHistory: recentHistory,\n      shouldRouteToAgent: detectedSkill.id !== 'default'\n    }\n  }\n};"
+      },
+      "id": "orchestrator",
+      "name": "Orchestrator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.orchestrator.detectedIntent }}",
+              "operation": "equals",
+              "value2": "calendar"
+            }
+          ]
+        }
+      },
+      "id": "calendar-route",
+      "name": "Calendar Route",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calendar Agent with Skills\n// Оптимизированный агент с минимальным промптом и отдельными скиллами\n\nconst text = $('Orchestrator').item.json.text;\nconst recentHistory = $('Orchestrator').item.json.orchestrator.recentHistory;\nconst skillContext = $('Orchestrator').item.json.orchestrator.skillContext;\n\n// Calendar Skills - отдельные функции без раздувания промпта\nconst calendarSkills = {\n  create_event: {\n    name: 'create_event',\n    description: 'Создать новое событие в календаре',\n    parameters: ['title', 'date', 'time', 'duration', 'description'],\n    prompt: 'Извлеки данные для создания события: название, дата, время, длительность, описание'\n  },\n  read_events: {\n    name: 'read_events',\n    description: 'Просмотреть события за период',\n    parameters: ['start_date', 'end_date', 'limit'],\n    prompt: 'Определи период для просмотра событий'\n  },\n  update_event: {\n    name: 'update_event',\n    description: 'Обновить существующее событие',\n    parameters: ['event_id', 'new_title', 'new_date', 'new_time'],\n    prompt: 'Найди событие и новые параметры для обновления'\n  },\n  delete_event: {\n    name: 'delete_event',\n    description: 'Удалить событие из календаря',\n    parameters: ['event_id', 'confirm'],\n    prompt: 'Идентифицируй событие для удаления и подтверждение'\n  }\n};\n\n// Определяем нужный скилл на основе текста\nconst textLower = text.toLowerCase();\nlet selectedSkill = 'create_event'; // default\n\nif (textLower.includes('посмотр') || textLower.includes('покаж') || textLower.includes('какие')) {\n  selectedSkill = 'read_events';\n} else if (textLower.includes('измен') || textLower.includes('обнов') || textLower.includes('перенес')) {\n  selectedSkill = 'update_event';\n} else if (textLower.includes('удал') || textLower.includes('отмен') || textLower.includes('сотри')) {\n  selectedSkill = 'delete_event';\n}\n\nconst skill = calendarSkills[selectedSkill];\n\n// Минимальный системный промпт для календаря (~150 токенов вместо 500+)\nconst systemPrompt = `Ты Calendar Agent с доступом к скиллу: ${skill.name}.\n${skill.description}\n\nКонтекст диалога:\n${recentHistory}\n\nТекущий запрос: ${text}\n\nТвоя задача: ${skill.prompt}\n\nОтвечай кратко, по делу. Если не хватает данных - запроси их у пользователя.`;\n\nreturn {\n  json: {\n    ...$('Orchestrator').item.json,\n    calendarAgent: {\n      selectedSkill: selectedSkill,\n      skillDetails: skill,\n      allSkills: Object.keys(calendarSkills),\n      systemPrompt: systemPrompt,\n      readyForLLM: true\n    }\n  }\n};"
+      },
+      "id": "calendar-agent",
+      "name": "Calendar Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 150],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "systemMessage": "={{ $json.calendarAgent.systemPrompt }}",
+          "maxTokens": 300,
+          "temperature": 0.7\n        }\n      },
+      "id": "calendar-llm",
+      "name": "Calendar LLM",
+      "type": "@n8n/n8n-nodes-langchain.llm",
+      "typeVersion": 1.3,
+      "position": [1650, 150],
+      "credentials": {
+        "openAiApi": {
+          "id": "{{env.OPENAI_CREDENTIAL_ID}}",
+          "name": "OpenAI API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.orchestrator.detectedIntent }}",
+              "operation": "notEquals",
+              "value2": "calendar"
+            }
+          ]
+        }
+      },
+      "id": "default-route",
+      "name": "Default Route",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Default Chat Agent для обычных разговоров\n// Минимальный промпт без раздувания контекста\n\nconst text = $('Orchestrator').item.json.text;\nconst recentHistory = $('Orchestrator').item.json.orchestrator.recentHistory;\nconst skillContext = $('Orchestrator').item.json.orchestrator.skillContext;\n\n// Очень компактный промпт (~80 токенов)\nconst systemPrompt = `Ты дружелюбный ассистент.\n\nДиалог:\n${recentHistory}\n\nПользователь: ${text}\n\nОтвечай кратко, полезно и естественно.`;\n\nreturn {\n  json: {\n    ...$('Orchestrator').item.json,\n    defaultAgent: {\n      systemPrompt: systemPrompt,\n      readyForLLM: true\n    }\n  }\n};"
+      },
+      "id": "default-agent",
+      "name": "Default Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 450],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "systemMessage": "={{ $json.defaultAgent.systemPrompt }}",
+          "maxTokens": 250,
+          "temperature": 0.8\n        }\n      },
+      "id": "default-llm",
+      "name": "Default LLM",
+      "type": "@n8n/n8n-nodes-langchain.llm",
+      "typeVersion": 1.3,
+      "position": [1650, 450],
+      "credentials": {
+        "openAiApi": {
+          "id": "{{env.OPENAI_CREDENTIAL_ID}}",
+          "name": "OpenAI API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge результатов от разных агентов в единый формат\n\nlet responseText = '';\nlet agentName = '';\n\nif ($input.first().json.calendarAgent && $input.first().json.calendarAgent.llmResponse) {\n  responseText = $input.first().json.calendarAgent.llmResponse;\n  agentName = 'Calendar Agent';\n} else if ($input.first().json.defaultAgent && $input.first().json.defaultAgent.llmResponse) {\n  responseText = $input.first().json.defaultAgent.llmResponse;\n  agentName = 'Default Agent';\n} else {\n  responseText = 'Произошла ошибка при обработке запроса.';\n  agentName = 'System';\n}\n\nreturn {\n  json: {\n    chatId: $input.first().json.chatId,\n    messageId: $input.first().json.messageId,\n    response: responseText,\n    agent: agentName,\n    timestamp: Date.now()\n  }\n};"
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Отправка сервисного сообщения \"Ассистент готовит ответ...\"\n// Будет удалено после получения ответа\n\nconst chatId = $('Merge Results').item.json.chatId;\nconst messageId = $('Merge Results').item.json.messageId;\n\nreturn {\n  json: {\n    chatId: chatId,\n    replyToMessageId: messageId,\n    text: '⏳ Ассистент готовит ответ...',\n    action: 'send_typing'\n  }\n};"
+      },
+      "id": "service-message-prep",
+      "name": "Service Message Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "chatId": "={{ $json.chatId }}",
+        "additionalFields": {\n          "replyToMessageId": "={{ $json.replyToMessageId }}\"\n        }\n      },
+      "id": "send-typing",
+      "name": "Send Typing",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2250, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "{{env.TELEGRAM_CREDENTIAL_ID}}",
+          "name": "Telegram API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "text": "={{ $('Merge Results').item.json.response }}",
+        "chatId": "={{ $('Merge Results').item.json.chatId }}",
+        "additionalFields": {\n          "replyToMessageId": "={{ $('Merge Results').item.json.messageId }}\",\n          "parseMode": "Markdown\"\n        }\n      },
+      "id": "send-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2450, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "{{env.TELEGRAM_CREDENTIAL_ID}}",
+          "name": "Telegram API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Обновление памяти после ответа ассистента\n\nconst memory = $('Merge Results').item.json.memory || {};\nconst chatId = $('Merge Results').item.json.chatId;\nconst response = $('Merge Results').item.json.response;\nconst agent = $('Merge Results').item.json.agent;\nconst timestamp = Date.now();\n\nif (memory[chatId]) {\n  // Добавляем ответ ассистента в историю\n  memory[chatId].messages.push({\n    role: 'assistant',\n    content: response,\n    timestamp: timestamp,\n    agent: agent\n  });\n  \n  // Обновляем контекст\n  memory[chatId].context.currentAgent = agent;\n  memory[chatId].lastActivity = timestamp;\n  \n  // Ограничиваем историю\n  if (memory[chatId].messages.length > 10) {\n    memory[chatId].messages = memory[chatId].messages.slice(-10);\n  }\n}\n\nreturn {\n  json: {\n    updatedMemory: memory,\n    success: true\n  }\n};"
+      },
+      "id": "update-memory",
+      "name": "Update Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Обработка ошибок с логированием и понятным сообщением пользователю\n\nconst errorMessage = $input.first().json.error?.message || 'Неизвестная ошибка';\nconst errorNode = $input.first().json.error?.node || 'Unknown';\nconst chatId = $input.first().json.chatId || 'unknown';\n\nconsole.error(`[ERROR] Node: ${errorNode}, Message: ${errorMessage}, ChatID: ${chatId}`);\n\n// Формируем безопасное сообщение для пользователя\nlet userMessage = '⚠️ Произошла ошибка при обработке вашего запроса.';\n\nif (errorMessage.includes('timeout') || errorMessage.includes('превышен')) {\n  userMessage = '⏱️ Превышено время ожидания ответа. Попробуйте еще раз.';\n} else if (errorMessage.includes('credential') || errorMessage.includes('auth')) {\n  userMessage = '🔐 Ошибка аутентификации. Администратор уведомлен.';\n} else if (errorMessage.includes('пустое') || errorMessage.includes('empty')) {\n  userMessage = '💬 Пожалуйста, отправьте сообщение с текстом.';\n}\n\nreturn {\n  json: {\n    chatId: chatId,\n    errorMessage: userMessage,\n    technicalError: errorMessage,\n    errorNode: errorNode,\n    timestamp: Date.now()\n  }\n};"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 600],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.errorMessage }}",
+        "chatId": "={{ $json.chatId }}",
+        "additionalFields": {\n          "parseMode": "Markdown\"\n        }\n      },
+      "id": "send-error",
+      "name": "Send Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1250, 600],
+      "credentials": {
+        "telegramApi": {
+          "id": "{{env.TELEGRAM_CREDENTIAL_ID}}",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Memory Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Manager": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Calendar Route",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Default Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Route": {
+      "main": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Default Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Agent": {
+      "main": [
+        [
+          {
+            "node": "Calendar LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar LLM": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Route": {
+      "main": [
+        [
+          {
+            "node": "Default Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Agent": {
+      "main": [
+        [
+          {
+            "node": "Default LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default LLM": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Service Message Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service Message Prep": {
+      "main": [
+        [
+          {
+            "node": "Send Typing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Typing": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response": {
+      "main": [
+        [
+          {
+            "node": "Update Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Send Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "refactored-version"
+  },
+  "versionId": "refactored-2025-v2",
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T00:00:00.000Z",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow-id"
+  },
+  "tags": [
+    {
+      "name": "production",
+      "color": "green"
+    },
+    {
+      "name": "refactored",
+      "color": "blue"
+    },
+    {
+      "name": "skill-based",
+      "color": "purple"
+    }
+  ]
+}
