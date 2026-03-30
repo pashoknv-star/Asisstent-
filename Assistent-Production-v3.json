@@ -10,8 +10,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -560,
-        -416
+        -176,
+        -256
       ],
       "alwaysOutputData": true
     },
@@ -31,8 +31,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -384,
-        -416
+        0,
+        -256
       ]
     },
     {
@@ -63,21 +63,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// === MEMORY HUB (SHARED) ===\n// Централизованное управление памятью сессий\n// В production заменить на вызов Redis/PostgreSQL через HTTP Request\n\nconst chatId = $input.first().json.chatId;\nconst userMessage = $input.first().json.message;\nconst timestamp = new Date().toISOString();\n\n// Ключ сессии\nconst sessionKey = `session:${chatId}`;\n\n// Имитация хранилища сессий (в production использовать $getWorkflowStaticData или внешнюю БД)\nlet session = {};\n\n// Попытка получить существующую сессию из статических данных workflow\ntry {\n  const staticData = $getWorkflowStaticData();\n  if (staticData.sessions && staticData.sessions[sessionKey]) {\n    session = staticData.sessions[sessionKey];\n  } else {\n    // Инициализация новой сессии\n    session = {\n      chatId: chatId,\n      createdAt: timestamp,\n      updatedAt: timestamp,\n      messageCount: 0,\n      history: [],\n      context: {\n        currentAgent: 'orchestrator',\n        lastIntent: null,\n        skills: ['calendar', 'default']\n      },\n      metadata: {\n        language: 'ru',\n        timezone: 'Asia/Yekaterinburg'\n      }\n    };\n  }\n} catch (error) {\n  // При ошибке создаём новую сессию\n  session = {\n    chatId: chatId,\n    createdAt: timestamp,\n    updatedAt: timestamp,\n    messageCount: 0,\n    history: [],\n    context: {\n      currentAgent: 'orchestrator',\n      lastIntent: null,\n      skills: ['calendar', 'default']\n    },\n    metadata: {\n      language: 'ru',\n      timezone: 'Asia/Yekaterinburg'\n    }\n  };\n}\n\n// Добавляем сообщение пользователя в историю\nsession.history.push({\n  role: 'user',\n  content: userMessage,\n  timestamp: timestamp\n});\n\n// Ограничиваем историю последними 10 сообщениями\nif (session.history.length > 10) {\n  session.history = session.history.slice(-10);\n}\n\nsession.messageCount += 1;\nsession.updatedAt = timestamp;\n\n// Сохраняем сессию в статические данные workflow\ntry {\n  const staticData = $getWorkflowStaticData();\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[sessionKey] = session;\n} catch (error) {\n  console.error('Failed to save session to static data:', error.message);\n}\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    sessionId: sessionKey,\n    session: session,\n    messageHistory: session.history,\n    sessionContext: session.context,\n    metadata: session.metadata,\n    isNewSession: session.messageCount === 1\n  }\n}];"
-      },
-      "id": "a32e0f43-f24d-44b8-ad42-82b7a90c37af",
-      "name": "Memory Hub (Shared)",
-      "type": "@n8n/n8n-nodes-langchain.memoryManager",
-      "typeVersion": 1,
-      "position": [
-        64,
-        -640
-      ],
-      "onError": "continueRegularOutput",
-      "notes": "Централизованное хранилище сессий с использованием $getWorkflowStaticData. В production заменить на Redis/PostgreSQL."
-    },
-    {
-      "parameters": {
         "jsCode": "// Объединение результатов от разных веток с очисткой от JSON-разметки\nlet responseText = '';\n\n// Получаем входные данные\nconst input = $input.first().json;\n\n// Функция для извлечения чистого текста из различных форматов\nfunction extractContent(data) {\n  if (!data) return '';\n  \n  // Если строка - пробуем распарсить как JSON\n  if (typeof data === 'string') {\n    try {\n      const parsed = JSON.parse(data);\n      // Возвращаем только полезное содержимое, убираем action\n      return parsed.response || parsed.content || parsed.text || parsed.message || data;\n    } catch (e) {\n      // Если не JSON - чистим от возможных остатков JSON-синтаксиса\n      return data\n        .replace(/^\\s*\\{\\s*\"action\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"response\"\\s*:\\s*\"/, '') // Удаляем {\"action\": \"...\", \"response\": \"\n        .replace(/\"\\s*\\}\\s*$/, '') // Удаляем завершающие \"}\n        .replace(/\\\\\"/g, '\"') // Раэкранируем кавычки\n        .trim();\n    }\n  }\n  \n  // Если объект - извлекаем content/response\n  if (typeof data === 'object') {\n    // Исключаем технические поля\n    const { action, confidence, forward_to, ...rest } = data;\n    return rest.response || rest.content || rest.text || rest.message || JSON.stringify(rest);\n  }\n  \n  return String(data);\n}\n\n// Определяем источник ответа\nif (input.choices?.[0]?.message?.content) {\n  // Стандартный формат OpenAI/Groq API\n  responseText = extractContent(input.choices[0].message.content);\n} else if (input.output) {\n  // Ответ от General Chat или других агентов\n  responseText = extractContent(input.output);\n} else if (input.response) {\n  // Ответ от LangChain Agent (Calendar)\n  responseText = extractContent(input.response);\n} else if (input.content) {\n  // Прямой формат content\n  responseText = extractContent(input.content);\n} else {\n  // Fallback\n  responseText = 'Произошла ошибка обработки запроса.';\n}\n\n// Финальная очистка от технических префиксов, если остались\nresponseText = responseText\n  .replace(/^\\s*{\\s*\"action\"\\s*:\\s*\"respond\"\\s*,\\s*\"response\"\\s*:\\s*\"/i, '')\n  .replace(/^\\s*{\\s*\"action\"\\s*:\\s*\"route_calendar\"\\s*,\\s*\"response\"\\s*:\\s*\"/i, '')\n  .replace(/\"\\s*}\\s*$/g, '')\n  .replace(/\\\\\"/g, '\"')\n  .replace(/^[\"']|[\"']$/g, '')\n  .trim();\n\n// Если после очистки пусто - используем fallback\nif (!responseText) {\n  responseText = 'Не удалось обработать ответ агента.';\n}\n\nreturn [{\n  json: {\n    chatId: $('Init Session & Validate').first().json.chatId,\n    text: responseText,\n    originalInput: $('Init Session & Validate').first().json.text\n  }\n}];"
       },
       "id": "17faf0ad-1224-444e-8a0c-f904e10e4be2",
@@ -104,32 +89,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"ТЫ — МАРШРУТИЗАТОР (ORCHESTRATOR).\\nТвоя задача: определить нужный СКИЛЛ (агент) на основе сообщения пользователя.\\n\\nДОСТУПНЫЕ СКИЛЛЫ:\\n1. calendar_agent — Работа с календарем (создать, удалить, найти событие, расписание).\\n2. general_chat — Обычный разговор, вопросы, уточнения (используется по умолчанию).\\n\\nПРАВИЛА:\\n- Если пользователь говорит о времени, встречах, планах -> выбирай 'calendar_agent'.\\n- В остальных случаях -> выбирай 'general_chat'.\\n- НЕ отвечай на вопрос, ТОЛЬКО выбери скилл.\\n\\nФОРМАТ ОТВЕТА (СТРОГО JSON):\\n{\\\"target_agent\\\": \\\"calendar_agent\\\" | \\\"general_chat\\\", \\\"confidence\\\": 0-1}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.text }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 150,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [
-        0,
-        -400
-      ],
-      "id": "7074c574-9d2e-472b-bcef-5fa8202aceb8",
-      "name": "Groq models",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "PkPpLSVu1GC9EZIv",
-          "name": "Bearer Auth account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "updates": [
           "message"
         ],
@@ -138,8 +97,8 @@
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
       "position": [
-        -736,
-        -416
+        -352,
+        -256
       ],
       "id": "2e72f7ce-50f6-4b90-b3f8-0f1e7e91629f",
       "name": "Telegram Trigger",
@@ -153,16 +112,29 @@
     },
     {
       "parameters": {
-        "jsCode": "// === CALENDAR TOOLS EXECUTOR ===\n// Полная реализация инструментов календаря с валидацией и обработкой ошибок\n\nconst task = $input.first().json.task;\nconst params = $input.first().json.params || {};\nconst timezone = $input.first().json.metadata?.timezone || 'Asia/Yekaterinburg';\nconst chatId = $input.first().json.chatId;\nconst messageHistory = $input.first().json.messageHistory || [];\n\n// Вспомогательная функция для парсинга дат из естественного языка\nfunction parseDateFromText(text) {\n  // Упрощённая реализация - в production использовать NLP библиотеку\n  const now = new Date();\n  \n  if (text.includes('завтра')) {\n    return new Date(now.setDate(now.getDate() + 1)).toISOString();\n  }\n  if (text.includes('сегодня')) {\n    return now.toISOString();\n  }\n  \n  // Попытка найти дату в формате YYYY-MM-DD или DD.MM.YYYY\n  const dateRegex = /(\\d{4}-\\d{2}-\\d{2}|\\d{2}\\.\\d{2}\\.\\d{4})/;\n  const match = text.match(dateRegex);\n  if (match) {\n    return new Date(match[0]).toISOString();\n  }\n  \n  return null;\n}\n\n// Извлечение параметров из истории сообщений\nfunction extractMissingParamsFromHistory(missingField, history) {\n  const lastMessages = history.slice(-3).map(m => m.content).join(' ');\n  \n  if (missingField === 'title') {\n    // Пытаемся извлечь название из сообщения\n    const titleMatch = lastMessages.match(/(?:встреч[ау]|событи[ея]|звонок|обед)[\\s]+(?:с\\s+)?([^\n,.!?]+)/i);\n    if (titleMatch) return titleMatch[1].trim();\n  }\n  \n  if (missingField === 'datetime') {\n    return parseDateFromText(lastMessages);\n  }\n  \n  return null;\n}\n\n// Реализация инструментов календаря\nconst calendarTools = {\n  \n  create_event: async (params) => {\n    // Проверка на наличие необходимых параметров\n    if (!params.title) {\n      // Пытаемся извлечь из истории\n      const extractedTitle = extractMissingParamsFromHistory('title', messageHistory);\n      if (extractedTitle) {\n        params.title = extractedTitle;\n      } else {\n        return {\n          success: false,\n          requiresFollowup: true,\n          message: 'Как называется событие?',\n          missingField: 'title',\n          action: 'create_event'\n        };\n      }\n    }\n    \n    if (!params.date && !params.datetime) {\n      const extractedDate = extractMissingParamsFromHistory('datetime', messageHistory);\n      if (extractedDate) {\n        params.datetime = extractedDate;\n      } else {\n        return {\n          success: false,\n          requiresFollowup: true,\n          message: 'На какую дату и время запланировать событие?',\n          missingField: 'datetime',\n          action: 'create_event'\n        };\n      }\n    }\n    \n    // Установка значения по умолчанию для длительности\n    if (!params.duration) {\n      params.duration = 60; // минут\n    }\n    \n    // Генерация уникального ID события\n    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n    const eventDatetime = params.date || params.datetime;\n    \n    // Форматирование даты для вывода\n    let formattedDate;\n    try {\n      const dateObj = new Date(eventDatetime);\n      formattedDate = dateObj.toLocaleString('ru-RU', {\n        timeZone: timezone,\n        day: 'numeric',\n        month: 'long',\n        hour: '2-digit',\n        minute: '2-digit'\n      });\n    } catch (e) {\n      formattedDate = eventDatetime;\n    }\n    \n    return {\n      success: true,\n      action: 'create_event',\n      data: {\n        eventId: eventId,\n        title: params.title,\n        datetime: eventDatetime,\n        duration: params.duration,\n        description: params.description || '',\n        timezone: timezone,\n        createdAt: new Date().toISOString()\n      },\n      message: `✅ Событие \"${params.title}\" создано\\n📅 ${formattedDate}\\n⏱️ Длительность: ${params.duration} мин.`,\n      requiresFollowup: false\n    };\n  },\n  \n  read_events: async (params) => {\n    const fromDate = params.fromDate ? new Date(params.fromDate) : new Date();\n    const toDate = params.toDate \n      ? new Date(params.toDate) \n      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // +7 дней\n    \n    // Mock-данные событий (в production заменить на API вызов)\n    const mockEvents = [\n      {\n        eventId: 'evt_001',\n        title: 'Встреча с командой',\n        datetime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),\n        duration: 60,\n        description: 'Еженедельный синк'\n      },\n      {\n        eventId: 'evt_002',\n        title: 'Обед с клиентом',\n        datetime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000).toISOString(),\n        duration: 90,\n        description: 'Обсуждение контракта'\n      },\n      {\n        eventId: 'evt_003',\n        title: 'Презентация проекта',\n        datetime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),\n        duration: 120,\n        description: 'Финальная презентация'\n      }\n    ];\n    \n    // Фильтрация событий по диапазону дат\n    const filteredEvents = mockEvents.filter(e => {\n      const eventDate = new Date(e.datetime);\n      return eventDate >= fromDate && eventDate <= toDate;\n    });\n    \n    // Форматирование списка событий\n    let eventsList = '';\n    filteredEvents.forEach((event, index) => {\n      const dateStr = new Date(event.datetime).toLocaleString('ru-RU', {\n        timeZone: timezone,\n        weekday: 'short',\n        day: 'numeric',\n        month: 'short',\n        hour: '2-digit',\n        minute: '2-digit'\n      });\n      eventsList += `${index + 1}. ${event.title}\\n   📅 ${dateStr} (${event.duration} мин.)\\n`;\n    });\n    \n    if (filteredEvents.length === 0) {\n      return {\n        success: true,\n        action: 'read_events',\n        data: { events: [], count: 0 },\n        message: '📅 На ближайшую неделю событий не запланировано.',\n        requiresFollowup: false\n      };\n    }\n    \n    return {\n      success: true,\n      action: 'read_events',\n      data: {\n        events: filteredEvents,\n        count: filteredEvents.length,\n        dateRange: { from: fromDate.toISOString(), to: toDate.toISOString() }\n      },\n      message: `📅 События на период:\\n\\n${eventsList}`,\n      requiresFollowup: false\n    };\n  },\n  \n  update_event: async (params) => {\n    if (!params.eventId && !params.title) {\n      const extractedTitle = extractMissingParamsFromHistory('title', messageHistory);\n      if (extractedTitle) {\n        params.title = extractedTitle;\n      } else {\n        return {\n          success: false,\n          requiresFollowup: true,\n          message: 'Какое событие нужно обновить? Укажите название или дату.',\n          missingField: 'eventId',\n          action: 'update_event'\n        };\n      }\n    }\n    \n    // Проверка что именно обновляем\n    const hasUpdates = params.newTitle || params.newDatetime || params.newDuration || params.newDescription;\n    if (!hasUpdates) {\n      return {\n        success: false,\n        requiresFollowup: true,\n        message: 'Что нужно изменить в событии? (время, название, длительность)',\n        missingField: 'updateData',\n        action: 'update_event'\n      };\n    }\n    \n    // Mock обновление\n    const eventId = params.eventId || `evt_by_title_${params.title}`;\n    const updates = [];\n    if (params.newTitle) updates.push(`название → \"${params.newTitle}\"`);\n    if (params.newDatetime) updates.push(`время → ${params.newDatetime}`);\n    if (params.newDuration) updates.push(`длительность → ${params.newDuration} мин.`);\n    \n    return {\n      success: true,\n      action: 'update_event',\n      data: {\n        eventId: eventId,\n        updated: true,\n        changes: updates\n      },\n      message: `✅ Событие обновлено:\\n${updates.map(u => '  • ' + u).join('\\n')}`,\n      requiresFollowup: false\n    };\n  },\n  \n  delete_event: async (params) => {\n    if (!params.eventId && !params.title) {\n      const extractedTitle = extractMissingParamsFromHistory('title', messageHistory);\n      if (extractedTitle) {\n        params.title = extractedTitle;\n      } else {\n        return {\n          success: false,\n          requiresFollowup: true,\n          message: 'Какое событие нужно удалить?',\n          missingField: 'eventId',\n          action: 'delete_event'\n        };\n      }\n    }\n    \n    // Mock удаление\n    const eventId = params.eventId || `evt_by_title_${params.title}`;\n    \n    return {\n      success: true,\n      action: 'delete_event',\n      data: {\n        deleted: true,\n        eventId: eventId\n      },\n      message: `✅ Событие \"${params.title || 'выбранное'}\" удалено из календаря`,\n      requiresFollowup: false\n    };\n  },\n  \n  check_availability: async (params) => {\n    let checkDate;\n    \n    if (params.date) {\n      checkDate = new Date(params.date);\n    } else {\n      // Пытаемся извлечь дату из истории\n      const extractedDate = extractMissingParamsFromHistory('datetime', messageHistory);\n      if (extractedDate) {\n        checkDate = new Date(extractedDate);\n      } else {\n        checkDate = new Date(); // Сегодня\n      }\n    }\n    \n    const dateStr = checkDate.toLocaleDateString('ru-RU', {\n      timeZone: timezone,\n      weekday: 'long',\n      day: 'numeric',\n      month: 'long'\n    });\n    \n    // Mock доступные слоты (в production проверить реальный календарь)\n    const availableSlots = [\n      { start: '09:00', end: '12:00', duration: 180 },\n      { start: '14:00', end: '18:00', duration: 240 }\n    ];\n    \n    const slotsText = availableSlots\n      .map(s => `  • ${s.start} - ${s.end} (${s.duration} мин.)`)\n      .join('\\n');\n    \n    return {\n      success: true,\n      action: 'check_availability',\n      data: {\n        date: checkDate.toISOString(),\n        availableSlots: availableSlots\n      },\n      message: `🕐 Доступные слоты на ${dateStr}:\\n\\n${slotsText}`,\n      requiresFollowup: false\n    };\n  }\n};\n\n// Главная функция выполнения\nasync function executeTool() {\n  try {\n    const tool = calendarTools[task];\n    \n    if (!tool) {\n      return {\n        success: false,\n        action: task,\n        message: `❌ Неизвестная задача: ${task}. Доступные: create_event, read_events, update_event, delete_event, check_availability`,\n        requiresFollowup: true,\n        error: 'Unknown task'\n      };\n    }\n    \n    const result = await tool(params);\n    \n    return {\n      json: {\n        ...$input.first().json,\n        calendarResult: result,\n        agentResponse: result.message,\n        requiresFollowup: result.requiresFollowup,\n        toolExecuted: task\n      }\n    };\n    \n  } catch (error) {\n    console.error('Calendar tool execution error:', error);\n    \n    return {\n      json: {\n        ...$input.first().json,\n        calendarResult: {\n          success: false,\n          action: task,\n          message: `❌ Ошибка выполнения: ${error.message}`,\n          requiresFollowup: false,\n          error: error.message\n        },\n        agentResponse: `Произошла ошибка при обработке запроса: ${error.message}`,\n        error: error.message\n      }\n    };\n  }\n}\n\n// Выполнение (синхронно для Code node в n8n)\nconst result = calendarTools[task] \n  ? calendarTools[task](params) \n  : {\n      success: false,\n      message: `Неизвестная задача: ${task}`,\n      requiresFollowup: true\n    };\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    calendarResult: result,\n    agentResponse: result.message,\n    requiresFollowup: result.requiresFollowup,\n    toolExecuted: task\n  }\n}];"
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Ты — General Chat. Отвечай кратко и по существу.\\n\\nПРАВИЛА:\\n1. Если тема = календарь/время/встречи → JSON: {\\\"action\\\": \\\"route_calendar\\\", \\\"response\\\": \\\"Переключаю на агента календаря\\\"}\\n2. Если обычный разговор → JSON: {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"твой ответ\\\"}\\n\\nПРИМЕРЫ:\\nUser: \\\"Привет\\\" → {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"Привет! Чем могу помочь?\\\"}\\nUser: \\\"Создай встречу\\\" → {\\\"action\\\": \\\"route_calendar\\\", \\\"response\\\": \\\"Переключаю...\\\"}\\nUser: \\\"Как дела?\\\" → {\\\"action\\\": \\\"respond\\\", \\\"response\\\": \\\"Отлично, готов помочь!\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.choices[0].message.reasoning.replace(/\\\"/g, '\\\\\\\"').replace(/\\\\n/g, ' ') }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 300,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        592,
+        576,
         -416
       ],
-      "onError": "continueRegularOutput",
-      "notes": "Полная реализация инструментов календаря с валидацией, извлечением параметров из истории и обработкой ошибок."
+      "id": "c3ac56fb-4330-4b07-b0b3-928515ec3b08",
+      "name": "Groq models1",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PkPpLSVu1GC9EZIv",
+          "name": "Bearer Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -175,7 +147,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1312,
+        1488,
         -416
       ],
       "id": "be4caff4-3b69-4391-88c9-65027fa413d7",
@@ -189,23 +161,6 @@
       }
     },
     {
-      "parameters": {},
-      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
-      "typeVersion": 1.3,
-      "position": [
-        -96,
-        -592
-      ],
-      "id": "600d8f80-3404-476c-a029-96b1dfdd06db",
-      "name": "Postgres Chat Memory",
-      "credentials": {
-        "postgres": {
-          "id": "iSv7BjVpmQa3C5uJ",
-          "name": "DB rag_base"
-        }
-      }
-    },
-    {
       "parameters": {
         "jsCode": "// === CALENDAR TOOLS IMPLEMENTATION ===\n// Реализация инструментов для работы с календарём\n\nconst task = $input.first().json.task;\nconst params = $input.first().json.params || {};\nconst timezone = $input.first().json.metadata?.timezone || 'Asia/Yekaterinburg';\nconst chatId = $input.first().json.chatId;\n\n// Mock-реализация (в production заменить на Google Calendar/Outlook API)\nconst calendarTools = {\n  \n  create_event: async (params) => {\n    // Валидация параметров\n    if (!params.title) {\n      return {\n        success: false,\n        requiresFollowup: true,\n        message: 'Как называется событие?',\n        missingField: 'title'\n      };\n    }\n    \n    if (!params.date && !params.datetime) {\n      return {\n        success: false,\n        requiresFollowup: true,\n        message: 'На какую дату и время запланировать событие?',\n        missingField: 'datetime'\n      };\n    }\n    \n    if (!params.duration) {\n      params.duration = 60; // По умолчанию 1 час\n    }\n    \n    // Mock создание события\n    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n    \n    return {\n      success: true,\n      action: 'create_event',\n      data: {\n        eventId: eventId,\n        title: params.title,\n        datetime: params.date || params.datetime,\n        duration: params.duration,\n        description: params.description || '',\n        createdAt: new Date().toISOString()\n      },\n      message: `✅ Событие \"${params.title}\" создано на ${params.date || params.datetime}`,\n      requiresFollowup: false\n    };\n  },\n  \n  read_events: async (params) => {\n    const fromDate = params.fromDate || new Date().toISOString();\n    const toDate = params.toDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();\n    \n    // Mock получение событий\n    const mockEvents = [\n      {\n        eventId: 'evt_001',\n        title: 'Встреча с командой',\n        datetime: '2026-04-01T10:00:00Z',\n        duration: 60\n      },\n      {\n        eventId: 'evt_002',\n        title: 'Обед с клиентом',\n        datetime: '2026-04-02T13:00:00Z',\n        duration: 90\n      }\n    ];\n    \n    return {\n      success: true,\n      action: 'read_events',\n      data: {\n        events: mockEvents,\n        count: mockEvents.length,\n        dateRange: { from: fromDate, to: toDate }\n      },\n      message: `📅 Найдено ${mockEvents.length} событий на ближайшую неделю`,\n      requiresFollowup: false\n    };\n  },\n  \n  update_event: async (params) => {\n    if (!params.eventId) {\n      return {\n        success: false,\n        requiresFollowup: true,\n        message: 'Какое событие нужно обновить? Укажите название или дату.',\n        missingField: 'eventId'\n      };\n    }\n    \n    // Mock обновление\n    return {\n      success: true,\n      action: 'update_event',\n      data: {\n        eventId: params.eventId,\n        updated: true\n      },\n      message: `✅ Событие обновлено`,\n      requiresFollowup: false\n    };\n  },\n  \n  delete_event: async (params) => {\n    if (!params.eventId && !params.title) {\n      return {\n        success: false,\n        requiresFollowup: true,\n        message: 'Какое событие нужно удалить?',\n        missingField: 'eventId'\n      };\n    }\n    \n    // Mock удаление\n    return {\n      success: true,\n      action: 'delete_event',\n      data: {\n        deleted: true\n      },\n      message: `✅ Событие удалено из календаря`,\n      requiresFollowup: false\n    };\n  },\n  \n  check_availability: async (params) => {\n    const date = params.date || new Date().toISOString().split('T')[0];\n    \n    // Mock проверка доступности\n    const availableSlots = [\n      { start: '09:00', end: '12:00' },\n      { start: '14:00', end: '18:00' }\n    ];\n    \n    return {\n      success: true,\n      action: 'check_availability',\n      data: {\n        date: date,\n        availableSlots: availableSlots\n      },\n      message: `🕐 Доступные слоты на ${date}: 09:00-12:00, 14:00-18:00`,\n      requiresFollowup: false\n    };\n  }\n};\n\n// Выполнение инструмента\nasync function executeTool() {\n  try {\n    const tool = calendarTools[task];\n    \n    if (!tool) {\n      return {\n        success: false,\n        action: task,\n        message: `❌ Неизвестная задача: ${task}`,\n        requiresFollowup: true\n      };\n    }\n    \n    const result = await tool(params);\n    \n    return {\n      json: {\n        ...$input.first().json,\n        calendarResult: result,\n        agentResponse: result.message,\n        requiresFollowup: result.requiresFollowup\n      }\n    };\n    \n  } catch (error) {\n    console.error('Calendar tool error:', error);\n    \n    return {\n      json: {\n        ...$input.first().json,\n        calendarResult: {\n          success: false,\n          action: task,\n          message: `❌ Ошибка выполнения: ${error.message}`,\n          requiresFollowup: false\n        },\n        agentResponse: `Произошла ошибка при обработке запроса: ${error.message}`,\n        error: error.message\n      }\n    };\n  }\n}\n\n// Для синхронного выполнения в n8n Code node\n// В реальном сценарии использовать асинхронные вызовы через HTTP Request\nconst result = calendarTools[task] ? calendarTools[task](params) : {\n  success: false,\n  message: `Неизвестная задача: ${task}`\n};\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    calendarResult: result,\n    agentResponse: result.message,\n    requiresFollowup: result.requiresFollowup\n  }\n}];"
       },
@@ -214,7 +169,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        768,
+        816,
         -560
       ],
       "onError": "continueRegularOutput",
@@ -236,7 +191,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// === UPDATE MEMORY HUB ===\n// Сохранение обновлённой истории сессии после обработки запроса\n\nconst chatId = $input.first().json.chatId;\nconst sessionKey = `session:${chatId}`;\nconst finalResponse = $input.first().json.finalResponse || $input.first().json.agentResponse || 'Ошибка: нет ответа';\nconst timestamp = new Date().toISOString();\n\n// Получаем текущую историю или создаём новую\nlet messageHistory = $input.first().json.messageHistory || [];\nlet session = $input.first().json.session || {};\n\n// Добавляем ответ ассистента в историю\nmessageHistory.push({\n  role: 'assistant',\n  content: finalResponse,\n  timestamp: timestamp\n});\n\n// Ограничиваем историю последними 10 сообщениями\nif (messageHistory.length > 10) {\n  messageHistory = messageHistory.slice(-10);\n}\n\n// Обновляем сессию\nsession.history = messageHistory;\nsession.updatedAt = timestamp;\nsession.lastIntent = $input.first().json.task || session.lastIntent;\n\n// Сохраняем в статические данные workflow\ntry {\n  const staticData = $getWorkflowStaticData();\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[sessionKey] = session;\n} catch (error) {\n  console.error('Failed to update session in static data:', error.message);\n}\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    memoryUpdated: true,\n    updatedHistory: messageHistory,\n    session: session\n  }\n}];"
+        "jsCode": "const sessionId = $input.first().json.sessionId;\nconst userMsg = $input.first().json.originalInput.replace(/'/g, \"''\");\nconst botMsg = $input.first().json.text.replace(/'/g, \"''\");\n\nreturn [{\n  json: {\n    query: `INSERT INTO chat_history (session_id, role, content) VALUES ('${sessionId}', 'user', '${userMsg}'), ('${sessionId}', 'assistant', '${botMsg}')`\n  }\n}];"
       },
       "id": "b6b44b95-6f9d-4e0f-8599-74b5888b1cb2",
       "name": "Update Memory Hub",
@@ -247,11 +202,11 @@
         -416
       ],
       "onError": "continueRegularOutput",
-      "notes": "Обновление сессии после обработки запроса. Сохраняет ответ ассистента в историю."
+      "notes": "Обновление сессии после обработки. В production - запись в БД."
     },
     {
       "parameters": {
-        "jsCode": "// === MEMORY HUB (SHARED) ===\n// Централизованное управление памятью сессий\n\nconst chatId = $input.first().json.chatId;\nconst userMessage = $input.first().json.message;\nconst timestamp = new Date().toISOString();\n\n// Ключ сессии в формате: session:{chatId}\nconst sessionKey = `session:${chatId}`;\n\n// Получаем существующую сессию или создаём новую\nlet session = {};\n\ntry {\n  // Попытка получить сессию из context (в реальном n8n это может быть Redis/DB)\n  // Для демо используем статическое хранилище в workflow\n  const existingSession = $(\"context\").item?.json?.[sessionKey];\n  \n  if (existingSession) {\n    session = JSON.parse(existingSession);\n  } else {\n    // Инициализация новой сессии\n    session = {\n      chatId: chatId,\n      createdAt: timestamp,\n      updatedAt: timestamp,\n      messageCount: 0,\n      history: [],\n      context: {\n        currentAgent: 'orchestrator',\n        lastIntent: null,\n        skills: ['calendar']\n      },\n      metadata: {\n        language: 'ru',\n        timezone: 'Asia/Yekaterinburg'\n      }\n    };\n  }\n} catch (error) {\n  // При ошибке создаём новую сессию\n  session = {\n    chatId: chatId,\n    createdAt: timestamp,\n    updatedAt: timestamp,\n    messageCount: 0,\n    history: [],\n    context: {\n      currentAgent: 'orchestrator',\n      lastIntent: null,\n      skills: ['calendar']\n    },\n    metadata: {\n      language: 'ru',\n      timezone: 'Asia/Yekaterinburg'\n    }\n  };\n}\n\n// Добавляем сообщение пользователя в историю\nsession.history.push({\n  role: 'user',\n  content: userMessage,\n  timestamp: timestamp\n});\n\n// Ограничиваем историю последними 10 сообщениями (для экономии токенов)\nif (session.history.length > 10) {\n  session.history = session.history.slice(-10);\n}\n\nsession.messageCount += 1;\nsession.updatedAt = timestamp;\n\n// Сохраняем сессию обратно в context\n// В production здесь будет вызов к Redis/PostgreSQL\nreturn [{\n  json: {\n    ...$input.first().json,\n    sessionId: sessionKey,\n    session: session,\n    messageHistory: session.history,\n    sessionContext: session.context,\n    metadata: session.metadata\n  }\n}];"
+        "jsCode": "// ВСЕГДА берем основные данные из Skip Empty? (там точно есть text, chatId и т.д.)\nconst skipEmptyData = $('Skip Empty?').first().json;\n\nif (!skipEmptyData || !skipEmptyData.text) {\n  throw new Error('Нет данных от Skip Empty?');\n}\n\nconst text = skipEmptyData.text;\nconst chatId = skipEmptyData.chatId;\nconst userId = skipEmptyData.userId;\nconst sessionId = skipEmptyData.sessionId || `chat_${chatId}_user_${userId}`;\n\n// Получаем историю из текущего input (от Postgres)\n// Postgres возвращает массив [{role: 'user', content: '...'}] или []\nconst input = $input.first().json;\nlet history = [];\n\nif (Array.isArray(input) && input.length > 0 && input[0].role) {\n  // История есть (Postgres вернул массив сообщений)\n  history = input;\n} else if (input && Array.isArray(input.data) && input.data.length > 0) {\n  // Если Postgres возвращает через поле data\n  history = input.data;\n}\n\n// Формируем messages для Groq\nconst messages = [\n  {\n    role: \"system\",\n    content: \"ТЫ — МАРШРУТИЗАТОР (ORCHESTRATOR).\\nТвоя задача: определить нужный СКИЛЛ (агент) на основе сообщения пользователя.\\n\\nДОСТУПНЫЕ СКИЛЛЫ:\\n1. calendar_agent — Работа с календарем (создать, удалить, найти событие, расписание).\\n2. general_chat — Обычный разговор, вопросы, уточнения (используется по умолчанию).\\n\\nПРАВИЛА:\\n- Если пользователь говорит о времени, встречах, планах -> выбирай 'calendar_agent'.\\n- В остальных случаях -> выбирай 'general_chat'.\\n- НЕ отвечай на вопрос, ТОЛЬКО выбери скилл.\\n\\nФОРМАТ ОТВЕТА (СТРОГО JSON):\\n{\\\"target_agent\\\": \\\"calendar_agent\\\" | \\\"general_chat\\\", \\\"confidence\\\": 0-1}\"\n  }\n];\n\n// Добавляем историю из БД (если есть)\nhistory.forEach(msg => {\n  if (msg && msg.role && msg.content) {\n    messages.push({\n      role: msg.role,\n      content: String(msg.content)\n    });\n  }\n});\n\n// Добавляем текущее сообщение пользователя (ВСЕГДА из Skip Empty?)\nmessages.push({\n  role: \"user\",\n  content: String(text)\n});\n\nreturn [{\n  json: {\n    chatId: chatId,\n    userId: userId,\n    sessionId: sessionId,\n    text: text,\n    messages: messages,\n    originalInput: {\n      role: 'user',\n      content: text\n    }\n  }\n}];"
       },
       "id": "0c8d6498-c3b7-4974-980f-743695ed512a",
       "name": "Memory Hub (Shared)1",
@@ -299,13 +254,13 @@
         "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"# Calendar Agent - Tool-Based Execution\n\n## ROLE\nYou are a Calendar Assistant with access to tools. Execute the requested task.\n\n## AVAILABLE TOOLS\n1. **create_event** - Create new calendar event\n2. **read_events** - List upcoming events\n3. **update_event** - Modify existing event\n4. **delete_event** - Remove event\n5. **check_availability** - Check free time slots\n\n## CURRENT TASK\nTask: {{ $json.task }}\nParameters: {{ JSON.stringify($json.params) }}\n\n## USER CONTEXT\nMessage: {{ $json.message }}\nHistory: {{ JSON.stringify($json.messageHistory.slice(-3)) }}\nTimezone: {{ $json.metadata.timezone }}\n\n## RULES\n1. Use tools for all calendar operations\n2. Return structured JSON with action result\n3. If params incomplete → ask clarifying questions\n4. Always include success/failure status\n\n## OUTPUT FORMAT\n{\n  \"action\": \"tool_name\",\n  \"success\": true/false,\n  \"data\": {...},\n  \"message\": \"User-friendly response\",\n  \"requiresFollowup\": false\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.choices[0].message.reasoning.replace(/\\\"/g, '\\\\\\\"').replace(/\\\\n/g, ' ') }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 300,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "jsonBody": "={\n  \"method\": \"POST\",\n  \"url\": \"https://api.groq.com/openai/v1/chat/completions\",\n  \"authentication\": \"genericCredentialType\",\n  \"genericAuthType\": \"httpBearerAuth\",\n  \"sendBody\": true,\n  \"specifyBody\": \"json\",\n  \"jsonBody\": \"={\\n  \\\"model\\\": \\\"openai/gpt-oss-120b\\\",\\n  \\\"messages\\\": [\\n    {\\n      \\\"role\\\": \\\"system\\\",\\n      \\\"content\\\": \\\"Ты — Calendar Intent Parser. Анализируй запрос пользователя и возвращай строго JSON с параметрами для Calendar API.\\\\n\\\\nДОСТУПНЫЕ ЗАДАЧИ (task):\\\\n- create_event: создать событие\\\\n- read_events: показать события (период: от сегодня +7 дней по умолчанию)\\\\n- update_event: изменить событие\\\\n- delete_event: удалить событие\\\\n- check_availability: проверить свободное время\\\\n\\\\nПАРАМЕТРЫ (params):\\\\n- create_event: {title (string, обязательно), datetime (ISO8601 с timezone), duration (минуты, default: 60), description (string)}\\\\n- read_events: {fromDate (ISO8601), toDate (ISO8601)}\\\\n- update_event: {eventId или title (для поиска), newTitle, newDatetime, newDuration}\\\\n- delete_event: {eventId или title}\\\\n- check_availability: {date (YYYY-MM-DD)}\\\\n\\\\nПРАВИЛА:\\\\n1. Таймзона пользователя: {{ $json.metadata?.timezone || 'Asia/Yekaterinburg' }} (UTC+5)\\\\n2. Если пользователь говорит 'завтра' — используй дату {{ new Date(Date.now() + 86400000).toISOString().split('T')[0] }}\\\\n3. Если время не указано — используй 10:00\\\\n4. Длительность по умолчанию: 60 минут\\\\n5. Все даты должны быть в ISO8601 с timezone +05:00\\\\n\\\\nФОРМАТ ОТВЕТА (строго JSON, без markdown):\\\\n{\\\\\\\"task\\\\\\\": \\\\\\\"create_event\\\\\\\", \\\\\\\"params\\\\\\\": {\\\\\\\"title\\\\\\\": \\\\\\\"...\\\\\\\", \\\\\\\"datetime\\\\\\\": \\\\\\\"2026-03-31T15:00:00+05:00\\\\\\\", \\\\\\\"duration\\\\\\\": 60}, \\\\\\\"confidence\\\\\\\": 0.95}\\\\n\\\\nЕсли запрос не про календарь: {\\\\\\\"task\\\\\\\": \\\\\\\"general_chat\\\\\\\", \\\\\\\"params\\\\\\\": {\\\\\\\"message\\\\\\\": \\\\\\\"текст ответа\\\\\\\"}, \\\\\\\"confidence\\\\\\\": 0.1}\\\"\\n    },\\n    {\\n      \\\"role\\\": \\\"user\\\",\\n      \\\"content\\\": \\\"={{ $json.choices[0].message.content }}\\\"\\n    },\\n    {\\n      \\\"role\\\": \\\"assistant\\\", \\n      \\\"content\\\": \\\"История диалога: {{ JSON.stringify($json.messageHistory?.slice(-2) || []) }}\\\"\\n    }\\n  ],\\n  \\\"temperature\\\": 0.1,\\n  \\\"max_tokens\\\": 600,\\n  \\\"response_format\\\": {\\n    \\\"type\\\": \\\"json_object\\\"\\n  }\\n}\",\n  \"options\": {}\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        592,
+        528,
         -560
       ],
       "id": "0ce886f3-676c-4790-bac4-67ad3cc39683",
@@ -317,6 +272,264 @@
           "name": "Bearer Auth account"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT role, content, created_at \nFROM chat_history \nWHERE session_id = '{{ $json.sessionId }}'\nORDER BY created_at ASC \nLIMIT 5",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -352,
+        -400
+      ],
+      "id": "95ab7dbe-ab01-4729-a99a-e86e1f9b976c",
+      "name": "Memory Hub",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "RDmnCD3zqIXN1a58",
+          "name": "Postgres Owntables"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": {{ JSON.stringify($json.messages) }},\n  \"temperature\": 0.1,\n  \"max_tokens\": 150,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        -400
+      ],
+      "id": "7074c574-9d2e-472b-bcef-5fa8202aceb8",
+      "name": "Groq ORCHESTRATOR",
+      "notesInFlow": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PkPpLSVu1GC9EZIv",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chat_history (session_id, role, content) \nVALUES \n('{{ $json.sessionId }}', 'user', '{{ $json.originalInput }}'),\n('{{ $json.sessionId }}', 'assistant', '{{ $json.text }}');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1312,
+        -416
+      ],
+      "id": "77549611-20c5-4e01-bcd1-0fbdfee16ce8",
+      "name": "Memory Hub1",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "RDmnCD3zqIXN1a58",
+          "name": "Postgres Owntables"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## {\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"# Calendar Agent - Tool-Based Execution\n\n## ROLE\nYou are a Calendar Assistant with access to tools. Execute the requested task.\n\n## AVAILABLE TOOLS\n1. **create_event** - Create new calendar event\n2. **read_events** - List upcoming events\n3. **update_event** - Modify existing event\n4. **delete_event** - Remove event\n5. **check_availability** - Check free time slots\n\n## CURRENT TASK\nTask: {{ $json.task }}\nParameters: {{ JSON.stringify($json.params) }}\n\n## USER CONTEXT\nMessage: {{ $json.message }}\nHistory: {{ JSON.stringify($json.messageHistory.slice(-3)) }}\nTimezone: {{ $json.metadata.timezone }}\n\n## RULES\n1. Use tools for all calendar operations\n2. Return structured JSON with action result\n3. If params incomplete → ask clarifying questions\n4. Always include success/failure status\n\n## OUTPUT FORMAT\n{\n  \"action\": \"tool_name\",\n  \"success\": true/false,\n  \"data\": {...},\n  \"message\": \"User-friendly response\",\n  \"requiresFollowup\": false\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.choices[0].message.reasoning.replace(/\\\"/g, '\\\\\\\"').replace(/\\\\n/g, ' ') }}\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 600,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "height": 416,
+        "width": 832
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1840,
+        -496
+      ],
+      "typeVersion": 1,
+      "id": "13a2d165-f827-40bf-9085-288c289fb7f5",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "{\n  \"parameters\": {\n    \"jsCode\": \"// Парсинг ответа от Groq и подготовка данных для Calendar API\\nconst inputData = $input.first().json;\\nconst content = inputData.choices?.[0]?.message?.content;\\n\\nlet parsed;\\ntry {\\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\\n} catch (e) {\\n  // Fallback если LLM вернул не JSON\\n  return [{\\n    json: {\\n      ...inputData,\\n      task: 'general_chat',\\n      params: { response: content || 'Не удалось обработать запрос' },\\n      isCalendarAction: false,\\n      agentResponse: content\\n    }\\n  }];\\n}\\n\\n// Проверяем наличие обязательных полей для create_event\\nif (parsed.task === 'create_event' && !parsed.params?.title) {\\n  parsed.task = 'general_chat';\\n  parsed.params = { \\n    response: 'Уточните, пожалуйста, название события. Как называется встреча?' \\n  };\\n}\\n\\nif (parsed.task === 'create_event' && !parsed.params?.datetime) {\\n  parsed.task = 'general_chat';\\n  parsed.params = { \\n    response: 'На какую дату и время запланировать событие?' \\n  };\\n}\\n\\nreturn [{\\n  json: {\\n    ...inputData,\\n    task: parsed.task || 'general_chat',\\n    params: parsed.params || {},\\n    confidence: parsed.confidence || 0.5,\\n    isCalendarAction: ['create_event', 'read_events', 'update_event', 'delete_event', 'check_availability'].includes(parsed.task),\\n    rawIntent: parsed\\n  }\\n}];\"\n  },\n  \"id\": \"parse-calendar-intent-001\",\n  \"name\": \"Parse Calendar Intent\",\n  \"type\": \"n8n-nodes-base.code\",\n  \"typeVersion\": 2,\n  \"position\": [768, -560]\n}"
+      },
+      "id": "3b30deb2-a432-4cfc-800a-9a9f11d9d208",
+      "name": "Parse Calendar Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -720
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Реализация инструментов календаря. В production заменить на API вызовы."
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "start": "={{ $fromAI('start', ``, 'string') }}",
+        "end": "={{ $fromAI('end', ``, 'string') }}",
+        "useDefaultReminders": "={{ $fromAI('Use_Default_Reminders', ``, 'boolean') }}",
+        "additionalFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', ``, 'string') }}",
+          "summary": "={{ $fromAI('summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        -848
+      ],
+      "id": "65f8a8e5-76b1-41b9-b2ac-3f5b5fc38408",
+      "name": "createEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Event_ID', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        832,
+        -848
+      ],
+      "id": "98123aab-557d-4737-8def-9af445af9a33",
+      "name": "deleteEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Event_ID', ``, 'string') }}",
+        "useDefaultReminders": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Use_Default_Reminders', ``, 'boolean') }}",
+        "updateFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', ``, 'string') }}",
+          "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', ``, 'string') }}",
+          "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', ``, 'string') }}",
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        -848
+      ],
+      "id": "ea5addf5-f9f5-43c8-bab5-ef3d756714d1",
+      "name": "updateEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "pashoknv@gmail.com",
+          "mode": "list",
+          "cachedResultName": "pashoknv@gmail.com"
+        },
+        "returnAll": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Return_All', ``, 'boolean') }}",
+        "timeMin": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('After', ``, 'string') }}",
+        "timeMax": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Before', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        -848
+      ],
+      "id": "6a74d210-a03c-4a39-890f-99713e626958",
+      "name": "getEvents",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "7tJNOvtUqCcaWZYu",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "code": {
+          "execute": {
+            "code": "/**\n * КАЛЕНДАРНЫЙ АГЕНТ - v3 (Исправленная логика дат и формата)\n */\nconst { ChatPromptTemplate } = require('@langchain/core/prompts');\nconst { AgentExecutor, createToolCallingAgent } = require('langchain/agents');\n\n// 1. ВХОДНЫЕ ДАННЫЕ\nconst inputData = $input.first().json;\nconst output = inputData.output || inputData;\nconst { intent, confidence, payload = {} } = output;\nconst { query = '', timezone = 'Asia/Yekaterinburg' } = payload;\n\nif (confidence < 0.8) {\n  return [{ json: { success: false, intent: \"clarification_needed\", error: \"Низкая уверенность\", original_query: query, confidence, message: \"Уточните запрос.\" } }];\n}\n\nlet action = null, eventName = null, targetDate = null, timeStart = null, timeEnd = null;\nlet events = [], parsedResult = null, executionError = null, agentOutput = null;\n\ntry {\n  const llm = await this.getInputConnectionData('ai_languageModel', 0);\n  const toolsArray = (await this.getInputConnectionData('ai_tool', 0)) || [];\n  if (!llm || toolsArray.length === 0) throw new Error('LLM или инструменты не подключены');\n\n  // 2. ДИНАМИЧЕСКИЙ СПРАВОЧНИК ДАТ\n  const now = new Date();\n  const fmt = (d) => d.toISOString().split('T')[0];\n  const fmtRu = (d) => {\n    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];\n    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;\n  };\n\n  const getRelativeDate = (days) => {\n    const d = new Date(now);\n    d.setDate(now.getDate() + days);\n    return d;\n  };\n\n  // Вычисляем границы недель\n  const day = now.getDay();\n  const monday = new Date(now);\n  monday.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));\n  const sunday = new Date(monday);\n  sunday.setDate(monday.getDate() + 6);\n\n  const nextMonday = new Date(monday);\n  nextMonday.setDate(monday.getDate() + 7);\n  const nextSunday = new Date(nextMonday);\n  nextSunday.setDate(nextMonday.getDate() + 6);\n\n  // Поиск следующего четверга\n  const nextThursday = new Date(now);\n  nextThursday.setDate(now.getDate() + ((4 + 7 - now.getDay()) % 7 || 7));\n\n  const periods = {\n    today: { s: `${fmt(now)}T00:00:00`, e: `${fmt(now)}T23:59:59` },\n    tomorrow: { s: `${fmt(getRelativeDate(1))}T00:00:00`, e: `${fmt(getRelativeDate(1))}T23:59:59` },\n    thisWeek: { s: `${fmt(monday)}T00:00:00`, e: `${fmt(sunday)}T23:59:59` },\n    nextWeek: { s: `${fmt(nextMonday)}T00:00:00`, e: `${fmt(nextSunday)}T23:59:59` },\n    nextThu: { s: `${fmt(nextThursday)}T00:00:00`, e: `${fmt(nextThursday)}T23:59:59` }\n  };\n\n  // 3. СИСТЕМНЫЙ ПРОМПТ (Строгий формат)\n  const systemPrompt = `Ты - агент Google Calendar. \nТекущее время: ${now.toISOString()} (${fmtRu(now)})\nТаймзона: ${timezone}\n\nСПРАВОЧНИК ДАТ (ИСПОЛЬЗУЙ ЭТИ ЗНАЧЕНИЯ):\n- Сегодня: ${fmtRu(now)} (After: ${periods.today.s}, Before: ${periods.today.e})\n- Завтра: ${fmtRu(getRelativeDate(1))} (After: ${periods.tomorrow.s}, Before: ${periods.tomorrow.e})\n- Эта неделя: ${fmtRu(monday)} - ${fmtRu(sunday)} (After: ${periods.thisWeek.s}, Before: ${periods.thisWeek.e})\n- Следующая неделя: ${fmtRu(nextMonday)} - ${fmtRu(nextSunday)} (After: ${periods.nextWeek.s}, Before: ${periods.nextWeek.e})\n- Следующий четверг: ${fmtRu(nextThursday)} (After: ${periods.nextThu.s}, Before: ${periods.nextThu.e})\n\nПРАВИЛА ОТВЕТА (ОБЯЗАТЕЛЬНО):\n1. getEvents (список): \"Список задач на неделю: [дата] – [дата]\\\\n- [дата], [время], [название]\"\n2. getEvents (одна задача): \"Задача на [дата], «[название]»:\\\\n- Время: [время]\\\\n- Дополнительно: [описание]\\\\n- Уведомления: стандартные напоминания\\\\n- ID: [id]\"\n3. createEvents: \"Задача «[название]», [дата], [время] создана. Дополнительно: [описание]\"\n4. deleteEvents: \"Задача «[название]», [дата] в [время] удалена\" (или \"Все задачи за [период] удалены\")\n5. updateEvents: \"Задача «[название]», [дата], [время] обновлена. Добавлено: [что добавлено]\"\n\nПРАВИЛА РАБОТЫ:\n- Всегда используй ISO 8601 с таймзоной для инструментов.\n- Если время не указано, ставь 12:00 или +1 час.\n- Для удаления/обновления сначала найди ID через getEvents.\n\nЗАПРОС: {input}`;\n\n  const prompt = ChatPromptTemplate.fromMessages([\n    [\"system\", systemPrompt],\n    [\"placeholder\", \"{agent_scratchpad}\"]\n  ]);\n\n  const agent = await createToolCallingAgent({ llm, tools: toolsArray, prompt });\n  const executor = new AgentExecutor({ agent, tools: toolsArray, maxIterations: 10, returnIntermediateSteps: true });\n\n  const result = await executor.invoke({ input: query });\n  agentOutput = result.output;\n\n  // 4. СБОР ДАННЫХ ДЛЯ ВЫХОДА\n  if (result.intermediateSteps?.length > 0) {\n    const lastStep = result.intermediateSteps[result.intermediateSteps.length - 1];\n    action = lastStep.action.tool;\n    const tIn = lastStep.action.toolInput;\n    eventName = tIn.Summary || tIn.summary || tIn.Summary_Update;\n    if (tIn.Start || tIn.start) {\n      [targetDate, timeStart] = (tIn.Start || tIn.start).split('T');\n      timeStart = timeStart?.substring(0, 5);\n    }\n    try {\n      parsedResult = typeof lastStep.observation === 'string' ? JSON.parse(lastStep.observation) : lastStep.observation;\n    } catch {\n      parsedResult = lastStep.observation;\n    }\n  }\n\n  const rawEvents = parsedResult?.items || parsedResult?.events || (Array.isArray(parsedResult) ? parsedResult : [parsedResult]);\n  events = (Array.isArray(rawEvents) ? rawEvents : []).filter(e => e && (e.id || e.summary)).map(e => ({\n    ...e,\n    name: e.summary || e.name || null,\n    date: e.start?.dateTime?.split('T')[0] || e.start?.date || e.date || null\n  }));\n\n} catch (error) {\n  executionError = error.message;\n}\n\nconst actionLabels = { getEvents: 'Получение', createEvents: 'Создание', deleteEvents: 'Удаление', updateEvents: 'Обновление' };\n\nreturn [{\n  json: {\n    success: !executionError,\n    error: executionError,\n    action,\n    action_readable: actionLabels[action] || action,\n    event_name: eventName || events[0]?.name || null,\n    date: targetDate || events[0]?.date || null,\n    time_start: timeStart,\n    time_end: timeEnd,\n    events,\n    events_count: events.length,\n    tool_result: parsedResult,\n    original_query: query,\n    confidence,\n    agent_response: agentOutput\n  }\n}];\n"
+          }
+        },
+        "inputs": {
+          "input": [
+            {
+              "type": "ai_tool",
+              "required": true
+            },
+            {
+              "type": "main",
+              "maxConnections": 1,
+              "required": true
+            }
+          ]
+        },
+        "outputs": {
+          "output": [
+            {
+              "type": "main"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.code",
+      "typeVersion": 1,
+      "position": [
+        528,
+        -960
+      ],
+      "id": "78d0be3b-2940-47f4-92e6-35452e3b80d2",
+      "name": "Calendar1"
     }
   ],
   "pinData": {},
@@ -337,7 +550,7 @@
         [],
         [
           {
-            "node": "Memory Hub (Shared)1",
+            "node": "Memory Hub",
             "type": "main",
             "index": 0
           }
@@ -362,17 +575,6 @@
         ]
       ]
     },
-    "Groq models": {
-      "main": [
-        [
-          {
-            "node": "Parse Orchestrator Decision",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Telegram Trigger": {
       "main": [
         [
@@ -390,17 +592,6 @@
           {
             "node": "Merge Responses",
             "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Postgres Chat Memory": {
-      "ai_memory": [
-        [
-          {
-            "node": "Memory Hub (Shared)",
-            "type": "ai_memory",
             "index": 0
           }
         ]
@@ -437,7 +628,7 @@
       "main": [
         [
           {
-            "node": "Groq models",
+            "node": "Groq ORCHESTRATOR",
             "type": "main",
             "index": 0
           }
@@ -459,7 +650,7 @@
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Memory Hub1",
             "type": "main",
             "index": 0
           }
@@ -470,8 +661,96 @@
       "main": [
         [
           {
+            "node": "Parse Calendar Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Hub": {
+      "main": [
+        [
+          {
+            "node": "Memory Hub (Shared)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq ORCHESTRATOR": {
+      "main": [
+        [
+          {
+            "node": "Parse Orchestrator Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Hub1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Calendar Intent": {
+      "main": [
+        [
+          {
             "node": "Calendar Tools Executor",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "createEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deleteEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "updateEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getEvents": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar1",
+            "type": "ai_tool",
             "index": 0
           }
         ]
@@ -482,7 +761,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "c1bfc7e5-7910-4e57-8011-31477463d2a9",
+  "versionId": "92e7b066-6355-49d4-943d-06f455bc9c73",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "ccf03437b343ab3a5d4bb83a8ba00957ad3202c3c6358cc13fae625b02e88ab3"
